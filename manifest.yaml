@@ -1,0 +1,232 @@
+schema_version: "1"
+
+identity:
+  id: "de.byte5.integration.odoo"
+  name: "Odoo Connector"
+  version: "0.1.0"
+  kind: "integration"
+  domain: "odoo"
+  description: "Gemeinsamer Odoo-JSON-RPC-Layer (read-only) für alle Odoo-Konsumenten + Handelsregister-Enrichment (OpenRegister / NorthData). Publishes kernel-Services 'odoo.client' (OdooClient), 'odoo.cache' (OdooResponseCache) + 'odoo.enrich' (CompanyEnrichmentProvider); contributes den native `enrich_company`-Tool via ctx.tools.register."
+  authors:
+    - name: "byte5 GmbH"
+      email: "dev@byte5.de"
+      url: "https://byte5.de"
+  license: "Proprietary"
+  categories:
+    - "integration"
+    - "erp"
+
+compat:
+  core: ">=1.0 <2.0"
+  node: ">=20"
+
+lifecycle:
+  entry: "dist/plugin.js"
+
+# S+8 sub-commit 2b: depends on @omadia/knowledge-graph for the
+# `knowledgeGraph` capability (consumed by OdooEntitySync,
+# NorthDataIngest, OpenRegisterIngest). The CapabilityResolver enforces
+# provider-before-consumer activation order — without this `requires:`
+# block, the plugin could activate before the KG plugin and the
+# `ctx.services.get<KnowledgeGraph>('knowledgeGraph')` lookup would fail.
+requires:
+  - "knowledgeGraph@^1"
+
+setup:
+  fields:
+    - key: "odoo_url"
+      type: "string"
+      label: "Odoo URL"
+      help: "Base-URL der Odoo-Instanz, z.B. https://erp.byte5.de. Kein trailing slash nötig."
+      required: true
+    - key: "odoo_db"
+      type: "string"
+      label: "Datenbank-Name"
+      help: "Name der Odoo-Datenbank — bei SaaS-Instanzen der Subdomain-Teil."
+      required: true
+    - key: "odoo_login"
+      type: "string"
+      label: "API-Login"
+      help: "E-Mail-Adresse des Technical-User-Accounts für JSON-RPC."
+      required: true
+    - key: "odoo_api_key"
+      type: "secret"
+      label: "API-Key"
+      help: "Rotierbar in Odoo → Profil → Accountsicherheit → New API Key."
+      required: true
+    - key: "odoo_proxy_max_bytes"
+      type: "string"
+      label: "Max Response-Size (Bytes)"
+      help: "Kappt Odoo-Antworten über diesem Limit, um Memory-Blow-Ups bei großen search_reads zu verhindern. Default 500000."
+      required: false
+      default: "500000"
+    - key: "odoo_insecure_tls"
+      type: "string"
+      label: "TLS-Verifizierung deaktivieren"
+      help: "Nur für lokalen Dev mit privatem CA-Cert: 'true' schaltet TLS-Verify für Odoo-Requests aus. Produktion MUSS leer oder 'false' bleiben."
+      required: false
+      default: "false"
+
+    # ------------------------------------------------------------------
+    # Entity-Sync (proactive graph population via ctx.jobs.register)
+    # ------------------------------------------------------------------
+    - key: "odoo_entity_sync_enabled"
+      type: "string"
+      label: "Entity-Sync aktivieren"
+      help: "'true' registriert einen Background-Job, der res.partner / hr.employee / hr.department / account.journal periodisch in den Knowledge-Graph spiegelt."
+      required: false
+      default: "false"
+    - key: "odoo_entity_sync_interval_hours"
+      type: "string"
+      label: "Entity-Sync Intervall (Stunden)"
+      help: "Zwischen 1 und 168. Default 6h."
+      required: false
+      default: "6"
+    - key: "odoo_entity_sync_page_size"
+      type: "string"
+      label: "Entity-Sync Page-Size"
+      help: "Odoo search_read batch-Größe pro Call. Default 100."
+      required: false
+      default: "100"
+    - key: "odoo_entity_sync_max_per_model"
+      type: "string"
+      label: "Entity-Sync Max pro Modell"
+      help: "Hard-cap für Records pro Modell-Durchlauf, z.B. 5000 = max 5k Records pro res.partner-Sync. Default 5000."
+      required: false
+      default: "5000"
+
+    # ------------------------------------------------------------------
+    # enrich_company tool — Handelsregister-Provider (OpenRegister / NorthData)
+    # ------------------------------------------------------------------
+    - key: "openregister_enabled"
+      type: "string"
+      label: "OpenRegister aktivieren"
+      help: "'true' aktiviert den OpenRegister-Provider für das enrich_company-Tool. Gewinnt vor NorthData, wenn beide aktiv sind."
+      required: false
+      default: "false"
+    - key: "openregister_api_key"
+      type: "secret"
+      label: "OpenRegister API-Key"
+      help: "Bearer-Token aus https://docs.openregister.de/authentication."
+      required: false
+    - key: "openregister_base_url"
+      type: "string"
+      label: "OpenRegister Base-URL"
+      help: "Default https://api.openregister.de."
+      required: false
+      default: "https://api.openregister.de"
+    - key: "openregister_rate_limit_rps"
+      type: "string"
+      label: "OpenRegister Rate-Limit (rps)"
+      required: false
+      default: "2"
+    - key: "openregister_cache_ttl_days"
+      type: "string"
+      label: "OpenRegister Cache-TTL (Tage)"
+      required: false
+      default: "30"
+    - key: "openregister_max_bytes"
+      type: "string"
+      label: "OpenRegister Max Response-Size"
+      required: false
+      default: "500000"
+    - key: "openregister_fetch_level"
+      type: "string"
+      label: "OpenRegister Fetch-Level"
+      help: "'minimal' (1 credit), 'standard' (3 credits, Default) oder 'full'."
+      required: false
+      default: "standard"
+    - key: "northdata_enabled"
+      type: "string"
+      label: "NorthData aktivieren"
+      help: "'true' aktiviert den NorthData-Provider (Plan-B, nur wenn openregister_enabled=false)."
+      required: false
+      default: "false"
+    - key: "northdata_api_key"
+      type: "secret"
+      label: "NorthData API-Key"
+      help: "X-Api-Key aus https://www.northdata.com/doc (Premium-Plan)."
+      required: false
+    - key: "northdata_base_url"
+      type: "string"
+      label: "NorthData Base-URL"
+      required: false
+      default: "https://www.northdata.com/_api"
+    - key: "northdata_rate_limit_rps"
+      type: "string"
+      label: "NorthData Rate-Limit (rps)"
+      required: false
+      default: "2"
+    - key: "northdata_cache_ttl_days"
+      type: "string"
+      label: "NorthData Cache-TTL (Tage)"
+      required: false
+      default: "30"
+    - key: "northdata_max_bytes"
+      type: "string"
+      label: "NorthData Max Response-Size"
+      required: false
+      default: "500000"
+
+playbook:
+  when_to_use: |
+    Wird implizit installiert, wenn ein Odoo-Konsument (Odoo-HR-Sub-Agent,
+    Odoo-Accounting-Sub-Agent, zukünftig weitere) installiert wird —
+    oder automatisch bei Boot, wenn ODOO_URL/ODOO_DB/ODOO_LOGIN/ODOO_API_KEY
+    in der .env stehen. Endanwender adressieren dieses Paket nicht direkt —
+    es liefert den geteilten Odoo-Client + Response-Cache via
+    Service-Registry.
+
+permissions:
+  memory:
+    reads: []
+    writes: []
+  graph:
+    reads: []
+    writes: []
+  network:
+    outbound: []
+  filesystem:
+    scratch: false
+
+integrations:
+  - id: "odoo_jsonrpc"
+    kind: "http"
+    target: "Odoo JSON-RPC (/jsonrpc + /web/session/authenticate)"
+    auth_from: "odoo_api_key"
+    docs: "https://www.odoo.com/documentation/17.0/developer/reference/external_api.html"
+  - id: "openregister"
+    kind: "http"
+    target: "OpenRegister REST API (https://api.openregister.de)"
+    auth_from: "openregister_api_key"
+    docs: "https://docs.openregister.de"
+  - id: "northdata"
+    kind: "http"
+    target: "NorthData Data API (https://www.northdata.com/_api)"
+    auth_from: "northdata_api_key"
+    docs: "https://github.com/northdata/api"
+
+# Capabilities this plugin contributes to the kernel.
+#
+# Naming follows `docs/harness-platform/conventions/service-capabilities.md`
+# (normativ ab 2026-04-23, retroaktiv für S+4-Artefakte). Dieses Plugin
+# publiziert plugin-scoped Services (§1.2 — `odoo.client`, `odoo.cache`,
+# `odoo.enrich`), einen plugin-contributed Native-Tool (`enrich_company`
+# via `ctx.tools.register`), und einen JobScheduler-Consumer (`entity-sync`
+# via `ctx.jobs.register`). Konsumiert Kernel-Bridge `knowledgeGraph`
+# (§3 — pre-S+8) via `ctx.services.get(...)`.
+#
+# Deferred zu S+8: sobald `@omadia/knowledge-graph` extrahiert wird,
+# hier ergänzen:
+#   requires:
+#     - "knowledgeGraph@^1"   # OdooEntitySync + NorthData/OpenRegister
+#                             # Ingest → graph.ingestCompanies/Persons/
+#                             # CompanyRelations/FinancialSnapshots
+# `entityRefBus` wird heute vom Odoo-Plugin NICHT konsumiert — der Kernel
+# reicht den Bus direkt an `createOdooExecuteTool` durch. Erst wenn
+# `createOdooExecuteTool` vom Kernel ins Plugin wandert (nicht in S+8
+# geplant), wird `requires: ["entityRefBus@^1"]` nötig.
+# Siehe S+4 design-gabel #5 und S+8 Follow-Up-Wiring für die vollständige
+# Migrations-Checkliste:
+# docs/harness-platform/briefings/S+8-knowledge-graph.md
+provides: []
