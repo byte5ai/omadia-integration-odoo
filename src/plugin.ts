@@ -9,11 +9,16 @@ import { OdooResponseCache } from './odooResponseCache.js';
 import { OpenRegisterClient } from './openRegisterClient.js';
 import { OpenRegisterIngest } from './openRegisterIngest.js';
 import type { CompanyEnrichmentProvider } from './companyEnrichment.js';
-import type { KnowledgeGraph } from './kernel-types.js';
+import type {
+  EntityRefBus,
+  KnowledgeGraph,
+  LocalSubAgentTool,
+} from './kernel-types.js';
 import {
   EnrichCompanyTool,
   enrichCompanyToolSpec,
 } from './northDataEnrichTool.js';
+import { createOdooExecuteTool } from './odooToolkit.js';
 
 /**
  * @omadia/integration-odoo — plugin entry point.
@@ -49,8 +54,17 @@ import {
 export const ODOO_CLIENT_SERVICE_NAME = 'odoo.client';
 export const ODOO_CACHE_SERVICE_NAME = 'odoo.cache';
 export const ODOO_ENRICH_SERVICE_NAME = 'odoo.enrich';
+// Phase 5B M3+M4: the accounting + HR sub-agents were extracted from the
+// kernel into their own packages (`@omadia/agent-odoo-accounting`,
+// `@omadia/agent-odoo-hr`) and consume their `odoo_execute` scope-locked
+// tool through these services. Without them published, the sub-agent
+// plugins fail to activate with "required service ... not published".
+export const ODOO_EXECUTE_TOOL_ACCOUNTING_SERVICE_NAME =
+  'odoo.executeTool.accounting';
+export const ODOO_EXECUTE_TOOL_HR_SERVICE_NAME = 'odoo.executeTool.hr';
 
 const KNOWLEDGE_GRAPH_SERVICE_NAME = 'knowledgeGraph';
+const ENTITY_REF_BUS_SERVICE_NAME = 'entityRefBus';
 
 /**
  * System-prompt text the orchestrator weaves into Claude's tool-list briefing
@@ -121,8 +135,41 @@ export async function activate(ctx: PluginContext): Promise<OdooPluginHandle> {
     cache,
   );
 
+  // Phase 5B M3+M4: publish scope-locked `odoo_execute` LocalSubAgentTools
+  // for the accounting + HR sub-agent plugins. The factory bakes in the
+  // scope (model + method whitelists) at construction time, so the
+  // accounting agent literally cannot reach HR models from its toolkit.
+  // entityRefBus is kernel-published; missing it means we're booting
+  // against a too-old kernel that hasn't wired the bus yet.
+  const entityRefBus = ctx.services.get<EntityRefBus>(
+    ENTITY_REF_BUS_SERVICE_NAME,
+  );
+  if (!entityRefBus) {
+    throw new Error(
+      `[odoo] requires '${ENTITY_REF_BUS_SERVICE_NAME}' service (kernel must publish before plugin activation)`,
+    );
+  }
+  const accountingExecuteTool = createOdooExecuteTool('accounting', {
+    client,
+    entityRefBus,
+    responseCache: cache,
+  });
+  const hrExecuteTool = createOdooExecuteTool('hr', {
+    client,
+    entityRefBus,
+    responseCache: cache,
+  });
+  const disposeAccountingExecute = ctx.services.provide<LocalSubAgentTool>(
+    ODOO_EXECUTE_TOOL_ACCOUNTING_SERVICE_NAME,
+    accountingExecuteTool,
+  );
+  const disposeHrExecute = ctx.services.provide<LocalSubAgentTool>(
+    ODOO_EXECUTE_TOOL_HR_SERVICE_NAME,
+    hrExecuteTool,
+  );
+
   ctx.log(
-    `[odoo] ready (url=${url}, db=${db}, login=${login}, maxBytes=${String(maxBytes)}, insecureTls=${String(insecureTls)}) — services '${ODOO_CLIENT_SERVICE_NAME}' + '${ODOO_CACHE_SERVICE_NAME}' published`,
+    `[odoo] ready (url=${url}, db=${db}, login=${login}, maxBytes=${String(maxBytes)}, insecureTls=${String(insecureTls)}) — services '${ODOO_CLIENT_SERVICE_NAME}' + '${ODOO_CACHE_SERVICE_NAME}' + '${ODOO_EXECUTE_TOOL_ACCOUNTING_SERVICE_NAME}' + '${ODOO_EXECUTE_TOOL_HR_SERVICE_NAME}' published`,
   );
 
   // --- enrich_company provider + tool ---------------------------------------
@@ -337,6 +384,8 @@ export async function activate(ctx: PluginContext): Promise<OdooPluginHandle> {
       disposeEntitySync?.();
       disposeEnrichTool?.();
       disposeEnrichService?.();
+      disposeHrExecute();
+      disposeAccountingExecute();
       disposeClient();
       disposeCache();
     },
