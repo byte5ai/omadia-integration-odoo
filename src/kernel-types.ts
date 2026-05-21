@@ -200,9 +200,43 @@ export interface LocalSubAgentToolSpec {
   };
 }
 
+/**
+ * Privacy-Shield v3 (stable-id tokenization) — tool-side PII field
+ * annotation. Mirror of `@omadia/plugin-api`'s `ToolPIIField`; kept in
+ * this kernel-types file so `integration-odoo` stays free of a direct
+ * dependency on the harness package, like every other type here.
+ *
+ * When a tool wrapper carries `piiFields`, the harness runs a
+ * stable-id tokenization pass over the tool's raw JSON result BEFORE
+ * the NER detectors, masking the annotated leaves as whole-value
+ * tokens. `path` / `idPath` are step expressions: `key`, `[]` array
+ * spread (may lead the path for a top-level array), and `[N]` array
+ * index (Odoo many2one tuples are `[id, label]`, so `field[1]` is the
+ * label and `field[0]` the id).
+ */
+export interface ToolPIIField {
+  readonly path: string;
+  readonly idPath: string;
+  readonly type?:
+    | 'PERSON'
+    | 'EMAIL'
+    | 'PHONE'
+    | 'IBAN'
+    | 'CARD'
+    | 'ADDRESS'
+    | 'ORG'
+    | 'APIKEY';
+}
+
 export interface LocalSubAgentTool {
   spec: LocalSubAgentToolSpec;
   handle(input: unknown): Promise<string>;
+  /**
+   * Optional PII field annotations consumed by the harness's
+   * privacy-guard stable-id pre-pass. Absent ⇒ the tool result goes
+   * straight to the NER detectors as before.
+   */
+  piiFields?: readonly ToolPIIField[];
 }
 
 // ---------------------------------------------------------------------------

@@ -7,7 +7,11 @@ import {
 } from './odooCore.js';
 import type { OdooClient } from './odooClient.js';
 import { OdooClientError } from './odooClient.js';
-import type { EntityRefBus, LocalSubAgentTool } from './kernel-types.js';
+import type {
+  EntityRefBus,
+  LocalSubAgentTool,
+  ToolPIIField,
+} from './kernel-types.js';
 import type { OdooResponseCache } from './odooResponseCache.js';
 
 const ExecuteInputSchema = z.object({
@@ -18,6 +22,49 @@ const ExecuteInputSchema = z.object({
 });
 
 const MAX_OUTPUT_CHARS = 60_000;
+
+/**
+ * Stable-id PII annotations for `odoo_execute` results, keyed by scope.
+ *
+ * Odoo `search_read` / `read` return a top-level array of records;
+ * every many2one field is a `[id, label]` tuple. The harness's
+ * privacy-guard stable-id pre-pass masks the label (`[1]`) keyed by
+ * the id (`[0]`), so an employee name is tokenised as a whole unit
+ * before it reaches the public LLM and restored — identity-stable,
+ * homonym-safe — on the way back. This is what fixes the live
+ * HR-Urlaubsranking leak where `employee_id: [116, "Jonathan Rüsche"]`
+ * surfaced as `«PERSON_53» Rüsche` (partial-name leak) or invented
+ * "Platz N" labels.
+ *
+ * Only unambiguous person-reference many2one fields are listed — they
+ * carry a person regardless of which model in the scope is queried. A
+ * record that lacks the field contributes no leaf, so over-listing is
+ * safe. Bare string fields like `hr.employee.name` are intentionally
+ * NOT annotated: `name` is a person on `hr.employee` but a
+ * department / job / leave-type label elsewhere, and a generic tool
+ * cannot tell which model produced the row — the NER detectors remain
+ * the defense-in-depth net for those.
+ */
+function odooM2oPii(field: string): ToolPIIField {
+  return {
+    path: '[].'.concat(field, '[1]'),
+    idPath: '[].'.concat(field, '[0]'),
+    type: 'PERSON',
+  };
+}
+
+const PII_FIELDS_BY_SCOPE: Record<OdooScope, readonly ToolPIIField[]> = {
+  hr: [
+    odooM2oPii('employee_id'),
+    odooM2oPii('user_id'),
+    odooM2oPii('manager_id'),
+  ],
+  accounting: [
+    odooM2oPii('partner_id'),
+    odooM2oPii('user_id'),
+    odooM2oPii('invoice_user_id'),
+  ],
+};
 
 /**
  * Builds the single `odoo_execute` tool for a sub-agent. The tool is
@@ -36,6 +83,7 @@ export function createOdooExecuteTool(
 ): LocalSubAgentTool {
   const allowedModels = [...ALLOWED_MODELS[scope]].sort().join(', ');
   return {
+    piiFields: PII_FIELDS_BY_SCOPE[scope],
     spec: {
       name: 'odoo_execute',
       description: [
