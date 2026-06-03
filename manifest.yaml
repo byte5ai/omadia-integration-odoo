@@ -271,3 +271,19 @@ integrations:
 # Migrations-Checkliste:
 # docs/harness-platform/briefings/S+8-knowledge-graph.md
 provides: []
+
+# Builder service-type auto-discovery: maps the `ctx.services.provide(...)`
+# surfaces an agent may consume to the TypeScript type it imports. On
+# activation the kernel registers each into the agent-builder's
+# serviceTypeRegistry (providedBy is derived from this plugin's id), so a
+# builder-generated agent that declares `external_reads` against `odoo.client`
+# typechecks + resolves at activate-time — no middleware restart.
+service_types:
+  - service: "odoo.client"
+    type:
+      from: "@omadia/integration-odoo"
+      name: "OdooClient"
+  - service: "odoo.cache"
+    type:
+      from: "@omadia/integration-odoo"
+      name: "OdooResponseCache"
