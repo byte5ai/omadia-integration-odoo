@@ -22,7 +22,7 @@ Plus optionally (only when `enrich_company` config-flag is set):
 
 ## Consumption Pattern
 
-Plugin must declare `de.byte5.integration.odoo` in `manifest.yaml`'s
+Plugin must declare `@omadia/integration-odoo` in `manifest.yaml`'s
 `depends_on`. Then in `activate()`:
 
 ```typescript
@@ -32,7 +32,7 @@ const odoo = ctx.services.get<OdooClient>('odoo.client');
 if (!odoo) {
   throw new Error(
     'odoo.client unavailable — ensure depends_on includes ' +
-    '"de.byte5.integration.odoo" and the integration is installed/active',
+    '"@omadia/integration-odoo" and the integration is installed/active',
   );
 }
 

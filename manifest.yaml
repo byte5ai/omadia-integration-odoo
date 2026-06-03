@@ -3,15 +3,15 @@ schema_version: "1"
 identity:
   id: "@omadia/integration-odoo"
   name: "Odoo Connector"
-  version: "0.1.3"
+  version: "0.1.5"
   kind: "integration"
   domain: "odoo"
   description: "Gemeinsamer Odoo-JSON-RPC-Layer (read-only) für alle Odoo-Konsumenten + Handelsregister-Enrichment (OpenRegister / NorthData). Publishes kernel-Services 'odoo.client' (OdooClient), 'odoo.cache' (OdooResponseCache) + 'odoo.enrich' (CompanyEnrichmentProvider); contributes den native `enrich_company`-Tool via ctx.tools.register."
   authors:
     - name: "byte5 GmbH"
-      email: "dev@byte5.de"
-      url: "https://byte5.de"
-  license: "Proprietary"
+      email: "info@omadia.ai"
+      url: "https://omadia.ai"
+  license: "MIT"
   categories:
     - "integration"
     - "erp"
@@ -33,11 +33,52 @@ requires:
   - "knowledgeGraph@^1"
 
 setup:
+  guide:
+    en: |
+      ## Set up the Odoo connection
+
+      The integration talks to Odoo's **External API** (JSON-RPC, read-only) with
+      an **API key** instead of a password. You need four values:
+
+      1. **Odoo URL**: your instance, e.g. `https://erp.example.com` or
+         `https://yourco.odoo.com` (no trailing slash needed).
+      2. **Database**: the Odoo database name (for SaaS instances usually the
+         subdomain part).
+      3. **API Login**: the email of a technical user account used for JSON-RPC.
+      4. **API Key**: in Odoo → **Profile → Account Security → New API Key** →
+         copy → field **API key**.
+
+      > Recommended: a dedicated technical user with exactly the required module
+      > read rights, not an admin account.
+      >
+      > Optional: the company-enrichment providers (OpenRegister / NorthData) are
+      > off by default — enable and key them only if you need commercial-register
+      > lookups.
+    de: |
+      ## Odoo-Verbindung einrichten
+
+      Die Integration spricht Odoos **External API** (JSON-RPC, read-only) mit
+      einem **API-Key** statt Passwort. Du brauchst vier Werte:
+
+      1. **Odoo URL**: deine Instanz, z.B. `https://erp.example.com` oder
+         `https://deinefirma.odoo.com` (kein trailing slash nötig).
+      2. **Datenbank**: Name der Odoo-Datenbank (bei SaaS-Instanzen meist der
+         Subdomain-Teil).
+      3. **API-Login**: E-Mail eines Technical-User-Accounts für JSON-RPC.
+      4. **API-Key**: in Odoo → **Profil → Accountsicherheit → New API Key** →
+         kopieren → Feld **API-Key**.
+
+      > Empfehlung: ein dedizierter Technical-User mit genau den nötigen
+      > Modul-Leserechten, kein Admin-Account.
+      >
+      > Optional: die Handelsregister-Enrichment-Provider (OpenRegister /
+      > NorthData) sind standardmäßig aus — nur aktivieren und keyen, wenn du
+      > Handelsregister-Lookups brauchst.
   fields:
     - key: "odoo_url"
       type: "string"
       label: "Odoo URL"
-      help: "Base-URL der Odoo-Instanz, z.B. https://erp.byte5.de. Kein trailing slash nötig."
+      help: "Base-URL der Odoo-Instanz, z.B. https://erp.example.com oder https://meinefirma.odoo.com. Kein trailing slash nötig."
       required: true
     - key: "odoo_db"
       type: "string"

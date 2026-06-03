@@ -1,11 +1,11 @@
 {
   "name": "@omadia/integration-odoo",
-  "version": "0.1.3",
+  "version": "0.1.5",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "description": "Odoo integration for the byte5 Harness — OdooClient + OdooToolkit factory + OdooEntitySync + NorthData/OpenRegister company-enrichment providers + enrich_company tool. Ships as a kind:integration plugin; publishes 'odoo.client', 'odoo.cache', 'odoo.enrich' services.",
+  "description": "Odoo integration for Omadia — OdooClient + OdooToolkit factory + OdooEntitySync + NorthData/OpenRegister company-enrichment providers + enrich_company tool. Ships as a kind:integration plugin; publishes 'odoo.client', 'odoo.cache', 'odoo.enrich' services.",
   "license": "MIT",
   "scripts": {
     "build": "tsc",
