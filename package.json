@@ -5,6 +5,12 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "description": "Odoo integration for Omadia — OdooClient + OdooToolkit factory + OdooEntitySync + NorthData/OpenRegister company-enrichment providers + enrich_company tool. Ships as a kind:integration plugin; publishes 'odoo.client', 'odoo.cache', 'odoo.enrich' services.",
   "license": "MIT",
   "scripts": {
@@ -33,5 +39,8 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/byte5ai/omadia-integration-odoo.git"
+  },
+  "allowScripts": {
+    "esbuild@0.24.2": true
   }
 }
