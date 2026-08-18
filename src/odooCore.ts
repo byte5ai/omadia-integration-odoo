@@ -19,6 +19,21 @@ export const ALLOWED_METHODS = new Set<string>([
   'fields_get',
 ]);
 
+/**
+ * Resolve which scope a model belongs to, or `undefined` if it is in no
+ * whitelist. Scopes are disjoint (HR `hr.*`/`resource.*` vs accounting
+ * `account.*`/`res.partner`…), so the first match is deterministic. Used by
+ * the generic `odoo_query` / `odoo_describe` native tools to auto-route a read
+ * through the right scope guard (and thus the right HR red-line stripping)
+ * without the model having to pass a scope explicitly.
+ */
+export function scopeForModel(model: string): OdooScope | undefined {
+  for (const scope of Object.keys(ALLOWED_MODELS) as OdooScope[]) {
+    if (ALLOWED_MODELS[scope].has(model)) return scope;
+  }
+  return undefined;
+}
+
 export const ALLOWED_MODELS: Record<OdooScope, Set<string>> = {
   accounting: new Set([
     'account.move',

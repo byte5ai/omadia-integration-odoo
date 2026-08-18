@@ -3,10 +3,10 @@ schema_version: "1"
 identity:
   id: "@omadia/integration-odoo"
   name: "Odoo Connector"
-  version: "0.1.5"
+  version: "0.2.0"
   kind: "integration"
   domain: "odoo"
-  description: "Gemeinsamer Odoo-JSON-RPC-Layer (read-only) für alle Odoo-Konsumenten + Handelsregister-Enrichment (OpenRegister / NorthData). Publishes kernel-Services 'odoo.client' (OdooClient), 'odoo.cache' (OdooResponseCache) + 'odoo.enrich' (CompanyEnrichmentProvider); contributes den native `enrich_company`-Tool via ctx.tools.register."
+  description: "Gemeinsamer Odoo-JSON-RPC-Layer (read-only) für alle Odoo-Konsumenten + Handelsregister-Enrichment (OpenRegister / NorthData). Publishes kernel-Services 'odoo.client' (OdooClient), 'odoo.cache' (OdooResponseCache), 'odoo.enrich' (CompanyEnrichmentProvider) + per-Scope Agent-Toolkits 'odoo.agentToolkit.{accounting,hr}' (query_graph + odoo_execute); contributes den native `odoo_version`-Tool und — optional via odoo_generic_read_enabled — die generischen Read-Tools `odoo_query` / `odoo_describe` sowie `enrich_company` via ctx.tools.register."
   authors:
     - name: "byte5 GmbH"
       email: "info@omadia.ai"
@@ -105,6 +105,16 @@ setup:
       type: "string"
       label: "TLS-Verifizierung deaktivieren"
       help: "Nur für lokalen Dev mit privatem CA-Cert: 'true' schaltet TLS-Verify für Odoo-Requests aus. Produktion MUSS leer oder 'false' bleiben."
+      required: false
+      default: "false"
+
+    # ------------------------------------------------------------------
+    # Generic read-only orchestrator tools (odoo_query / odoo_describe)
+    # ------------------------------------------------------------------
+    - key: "odoo_generic_read_enabled"
+      type: "string"
+      label: "Generische Odoo-Read-Tools aktivieren"
+      help: "'true' registriert die orchestrator-weiten Tools `odoo_query` (search_read) und `odoo_describe` (Schema). Sie lesen über die HR-/Accounting-Scope-Grenze hinweg (model-auto-routing), bleiben aber strikt read-only und behalten die HR-Red-Line-Sperren (Gehälter, Bank-/Privatdaten). Default 'false' — ohne Aktivierung läuft Odoo-Zugriff nur über die Sub-Agents. Das `odoo_version`-Tool ist unabhängig davon immer aktiv."
       required: false
       default: "false"
 

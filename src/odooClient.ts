@@ -33,6 +33,14 @@ export interface OdooExecuteRequest {
   kwargs: Record<string, unknown>;
 }
 
+/** Shape of the Odoo `common.version` payload (fields are best-effort). */
+export interface OdooServerVersion {
+  server_version?: string;
+  server_version_info?: unknown[];
+  server_serie?: string;
+  protocol_version?: number;
+}
+
 /**
  * Thin JSON-RPC wrapper around the Odoo /jsonrpc endpoint. Caches the
  * authenticated UID in-process and transparently re-authenticates when
@@ -120,6 +128,22 @@ export class OdooClient {
    * surfaces a session-related error. */
   invalidateSession(): void {
     this.uidPromise = undefined;
+  }
+
+  /**
+   * Odoo server version + capability info via the unauthenticated `common`
+   * service `version` method. Cheap, no UID/auth needed — used by the
+   * `odoo_version` native tool to answer "which Odoo version are we on?".
+   * Returns the raw Odoo payload: `{ server_version, server_version_info,
+   * server_serie, protocol_version }`.
+   */
+  async version(): Promise<OdooServerVersion> {
+    const result = await this.rpc({
+      service: 'common',
+      method: 'version',
+      args: [],
+    });
+    return (result ?? {}) as OdooServerVersion;
   }
 
   /** Returns the cached UID or authenticates on demand. */

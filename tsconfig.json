@@ -21,7 +21,8 @@
     "composite": true,
     "paths": {
       "@omadia/plugin-api": ["../odoo-bot/middleware/packages/plugin-api/dist/index.d.ts"],
-      "@omadia/orchestrator": ["../odoo-bot/middleware/packages/harness-orchestrator/dist/index.d.ts"]
+      "@omadia/orchestrator": ["../odoo-bot/middleware/packages/harness-orchestrator/dist/index.d.ts"],
+      "@omadia/verifier": ["../odoo-bot/middleware/packages/harness-verifier/dist/index.d.ts"]
     }
   },
   "include": ["src/**/*.ts"],

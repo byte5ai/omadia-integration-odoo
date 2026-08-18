@@ -1,6 +1,6 @@
 {
   "name": "@omadia/integration-odoo",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
@@ -11,7 +11,7 @@
       "default": "./dist/index.js"
     }
   },
-  "description": "Odoo integration for Omadia — OdooClient + OdooToolkit factory + OdooEntitySync + NorthData/OpenRegister company-enrichment providers + enrich_company tool. Ships as a kind:integration plugin; publishes 'odoo.client', 'odoo.cache', 'odoo.enrich' services.",
+  "description": "Odoo integration for Omadia — OdooClient + OdooToolkit factory + per-scope agent-toolkit services + generic read-only tools (odoo_query/odoo_describe/odoo_version) + OdooEntitySync + NorthData/OpenRegister company-enrichment providers + enrich_company tool. Ships as a kind:integration plugin; publishes 'odoo.client', 'odoo.cache', 'odoo.enrich', 'odoo.agentToolkit.*' services.",
   "license": "MIT",
   "scripts": {
     "build": "tsc",
@@ -20,6 +20,7 @@
   },
   "peerDependencies": {
     "@omadia/plugin-api": "*",
+    "@omadia/verifier": "*",
     "undici": "^7.16.0",
     "zod": "^3.25.76"
   },
@@ -30,7 +31,8 @@
     "zod": "^3.25.76",
     "esbuild": "^0.24.0",
     "@omadia/plugin-api": "file:../odoo-bot/middleware/packages/plugin-api",
-    "@omadia/orchestrator": "file:../odoo-bot/middleware/packages/harness-orchestrator"
+    "@omadia/orchestrator": "file:../odoo-bot/middleware/packages/harness-orchestrator",
+    "@omadia/verifier": "file:../odoo-bot/middleware/packages/harness-verifier"
   },
   "engines": {
     "node": ">=20"
