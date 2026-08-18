@@ -19,6 +19,22 @@ import {
   enrichCompanyToolSpec,
 } from './northDataEnrichTool.js';
 import { createOdooExecuteTool } from './odooToolkit.js';
+import {
+  buildOdooAgentToolkit,
+  ODOO_AGENT_TOOLKIT_SERVICE_NAMES,
+  type OdooAgentToolkit,
+} from './agentToolkit.js';
+import {
+  ODOO_DESCRIBE_PROMPT_DOC,
+  ODOO_QUERY_PROMPT_DOC,
+  ODOO_VERSION_PROMPT_DOC,
+  createOdooDescribeHandler,
+  createOdooQueryHandler,
+  createOdooVersionHandler,
+  odooDescribeToolSpec,
+  odooQueryToolSpec,
+  odooVersionToolSpec,
+} from './odooReadTools.js';
 
 /**
  * @omadia/integration-odoo — plugin entry point.
@@ -168,8 +184,69 @@ export async function activate(ctx: PluginContext): Promise<OdooPluginHandle> {
     hrExecuteTool,
   );
 
+  // Phase 6: publish the fully-assembled per-scope agent toolkits
+  // (`query_graph` + `odoo_execute`) so the @omadia/agent-odoo-{hr,accounting}
+  // plugins become thin consumers instead of each re-building the graph-lookup
+  // tool + service-wiring boilerplate. `knowledgeGraph` is guaranteed present
+  // by this plugin's manifest `requires`. If it is somehow absent we skip
+  // publishing — the agent's own service null-check then fails activation with
+  // the same "required service not published" error as before.
+  let disposeAccountingToolkit: (() => void) | undefined;
+  let disposeHrToolkit: (() => void) | undefined;
+  const graphForToolkit = ctx.services.get<KnowledgeGraph>(
+    KNOWLEDGE_GRAPH_SERVICE_NAME,
+  );
+  if (graphForToolkit) {
+    disposeAccountingToolkit = ctx.services.provide<OdooAgentToolkit>(
+      ODOO_AGENT_TOOLKIT_SERVICE_NAMES.accounting,
+      buildOdooAgentToolkit('accounting', {
+        executeTool: accountingExecuteTool,
+        graph: graphForToolkit,
+      }),
+    );
+    disposeHrToolkit = ctx.services.provide<OdooAgentToolkit>(
+      ODOO_AGENT_TOOLKIT_SERVICE_NAMES.hr,
+      buildOdooAgentToolkit('hr', { executeTool: hrExecuteTool, graph: graphForToolkit }),
+    );
+  } else {
+    ctx.log(
+      "[odoo] knowledgeGraph absent — '%s' / '%s' NOT published; odoo sub-agents will fail to activate (expected without KG)"
+        .replace('%s', ODOO_AGENT_TOOLKIT_SERVICE_NAMES.accounting)
+        .replace('%s', ODOO_AGENT_TOOLKIT_SERVICE_NAMES.hr),
+    );
+  }
+
+  // Generic read-only native tools (orchestrator-level). `odoo_version` is
+  // always on (metadata-only). `odoo_query` / `odoo_describe` are opt-in via
+  // `odoo_generic_read_enabled` — they widen Odoo reads beyond the HR /
+  // accounting sub-agent boundary, but still route through executeOdoo so the
+  // model whitelist + HR red-line stripping stay in force.
+  const readToolDeps = { client, entityRefBus, responseCache: cache };
+  const disposeVersionTool = ctx.tools.register(
+    odooVersionToolSpec,
+    createOdooVersionHandler(readToolDeps),
+    { promptDoc: ODOO_VERSION_PROMPT_DOC },
+  );
+  let disposeQueryTool: (() => void) | undefined;
+  let disposeDescribeTool: (() => void) | undefined;
+  const genericReadEnabled = parseBoolean(
+    ctx.config.get<string>('odoo_generic_read_enabled'),
+  );
+  if (genericReadEnabled) {
+    disposeQueryTool = ctx.tools.register(
+      odooQueryToolSpec,
+      createOdooQueryHandler(readToolDeps),
+      { promptDoc: ODOO_QUERY_PROMPT_DOC },
+    );
+    disposeDescribeTool = ctx.tools.register(
+      odooDescribeToolSpec,
+      createOdooDescribeHandler(readToolDeps),
+      { promptDoc: ODOO_DESCRIBE_PROMPT_DOC },
+    );
+  }
+
   ctx.log(
-    `[odoo] ready (url=${url}, db=${db}, login=${login}, maxBytes=${String(maxBytes)}, insecureTls=${String(insecureTls)}) — services '${ODOO_CLIENT_SERVICE_NAME}' + '${ODOO_CACHE_SERVICE_NAME}' + '${ODOO_EXECUTE_TOOL_ACCOUNTING_SERVICE_NAME}' + '${ODOO_EXECUTE_TOOL_HR_SERVICE_NAME}' published`,
+    `[odoo] ready (url=${url}, db=${db}, login=${login}, maxBytes=${String(maxBytes)}, insecureTls=${String(insecureTls)}) — services '${ODOO_CLIENT_SERVICE_NAME}' + '${ODOO_CACHE_SERVICE_NAME}' + '${ODOO_EXECUTE_TOOL_ACCOUNTING_SERVICE_NAME}' + '${ODOO_EXECUTE_TOOL_HR_SERVICE_NAME}' published; tools: odoo_version${genericReadEnabled ? ' + odoo_query + odoo_describe' : ' (generic read disabled)'}`,
   );
 
   // --- enrich_company provider + tool ---------------------------------------
@@ -382,6 +459,11 @@ export async function activate(ctx: PluginContext): Promise<OdooPluginHandle> {
       ctx.log('deactivating odoo integration');
       if (initialSyncTimer !== undefined) clearTimeout(initialSyncTimer);
       disposeEntitySync?.();
+      disposeQueryTool?.();
+      disposeDescribeTool?.();
+      disposeVersionTool();
+      disposeHrToolkit?.();
+      disposeAccountingToolkit?.();
       disposeEnrichTool?.();
       disposeEnrichService?.();
       disposeHrExecute();

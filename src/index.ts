@@ -27,12 +27,30 @@ export { extractOdooEntityRefs } from './odooEntityExtractor.js';
 
 export {
   executeOdoo,
+  scopeForModel,
   ALLOWED_METHODS,
   ALLOWED_MODELS,
 } from './odooCore.js';
 export type { OdooScope } from './odooCore.js';
 
 export { createOdooExecuteTool } from './odooToolkit.js';
+
+export {
+  buildOdooAgentToolkit,
+  ODOO_AGENT_TOOLKIT_SERVICE_NAMES,
+} from './agentToolkit.js';
+export type { OdooAgentToolkit } from './agentToolkit.js';
+
+export {
+  odooQueryToolSpec,
+  odooDescribeToolSpec,
+  odooVersionToolSpec,
+  createOdooQueryHandler,
+  createOdooDescribeHandler,
+  createOdooVersionHandler,
+} from './odooReadTools.js';
+export type { OdooReadToolDeps } from './odooReadTools.js';
+export type { OdooServerVersion } from './odooClient.js';
 
 export { NorthDataClient, NorthDataClientError } from './northDataClient.js';
 export { NorthDataResponseCache } from './northDataResponseCache.js';
