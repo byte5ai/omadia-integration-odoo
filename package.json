@@ -15,7 +15,9 @@
   "license": "MIT",
   "scripts": {
     "build": "tsc",
+    "package": "node scripts/build-zip.mjs",
     "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist out *.tsbuildinfo",
     "test": "node scripts/test.mjs"
   },
   "peerDependencies": {
