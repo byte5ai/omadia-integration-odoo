@@ -3,7 +3,7 @@ schema_version: "1"
 identity:
   id: "@omadia/integration-odoo"
   name: "Odoo Connector"
-  version: "0.2.0"
+  version: "0.2.1"
   kind: "integration"
   domain: "odoo"
   description: "Gemeinsamer Odoo-JSON-RPC-Layer (read-only) für alle Odoo-Konsumenten + Handelsregister-Enrichment (OpenRegister / NorthData). Publishes kernel-Services 'odoo.client' (OdooClient), 'odoo.cache' (OdooResponseCache), 'odoo.enrich' (CompanyEnrichmentProvider) + per-Scope Agent-Toolkits 'odoo.agentToolkit.{accounting,hr}' (query_graph + odoo_execute); contributes den native `odoo_version`-Tool und — optional via odoo_generic_read_enabled — die generischen Read-Tools `odoo_query` / `odoo_describe` sowie `enrich_company` via ctx.tools.register."
@@ -31,6 +31,15 @@ lifecycle:
 # `ctx.services.get<KnowledgeGraph>('knowledgeGraph')` lookup would fail.
 requires:
   - "knowledgeGraph@^1"
+  # omadia#839 — `createOdooExecuteTool` resolves the kernel entity-ref bus
+  # via `ctx.services.get('entityRefBus')` and activate() throws when it is
+  # absent, so it is a hard prerequisite. It is declared under `provides:` by
+  # the knowledge-graph plugins (`@omadia/knowledge-graph-inmemory` / `-neon`)
+  # — the same plugins that provide `knowledgeGraph@^1` above — so a
+  # `requires:` edge resolves and is co-satisfied with the existing KG
+  # dependency. This retires the `@omadia/integration-odoo` row in
+  # `STANDALONE_LEGACY_SERVICE_GRANTS_2026_08_20`.
+  - "entityRefBus@^1"
 
 setup:
   guide:
@@ -280,7 +289,24 @@ integrations:
 # Siehe S+4 design-gabel #5 und S+8 Follow-Up-Wiring für die vollständige
 # Migrations-Checkliste:
 # docs/harness-platform/briefings/S+8-knowledge-graph.md
-provides: []
+#
+# omadia#839 — declare the plugin-scoped services this integration publishes
+# via `ctx.services.provide(...)` at activate. This is the PROVIDER half of the
+# odoo retirement: it lets the consumer agents (`@omadia/agent-odoo-hr`,
+# `@omadia/agent-odoo-accounting`) declare the matching names under `requires:`
+# and have the capability resolver resolve the edge + order this integration
+# first. Each name below is backed by a real `ctx.services.provide` call in
+# `src/plugin.ts` — `odoo.client`/`odoo.cache` unconditionally, the per-scope
+# `odoo.agentToolkit.{hr,accounting}` and `odoo.enrich` conditionally (the
+# service gate grants a consumer via this declaration regardless; if the
+# runtime `provide` was skipped, the consumer's own `services.get` null-check
+# throws exactly as before — a declaration is not a runtime guarantee).
+provides:
+  - "odoo.client@1"
+  - "odoo.cache@1"
+  - "odoo.agentToolkit.hr@1"
+  - "odoo.agentToolkit.accounting@1"
+  - "odoo.enrich@1"
 
 # Builder service-type auto-discovery: maps the `ctx.services.provide(...)`
 # surfaces an agent may consume to the TypeScript type it imports. On
