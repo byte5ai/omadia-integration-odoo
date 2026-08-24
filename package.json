@@ -1,6 +1,6 @@
 {
   "name": "@omadia/integration-odoo",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
@@ -11,7 +11,7 @@
       "default": "./dist/index.js"
     }
   },
-  "description": "Odoo integration for Omadia — OdooClient + OdooToolkit factory + per-scope agent-toolkit services + generic read-only tools (odoo_query/odoo_describe/odoo_version) + OdooEntitySync + NorthData/OpenRegister company-enrichment providers + enrich_company tool. Ships as a kind:integration plugin; publishes 'odoo.client', 'odoo.cache', 'odoo.enrich', 'odoo.agentToolkit.*' services.",
+  "description": "Odoo integration for Omadia \u2014 OdooClient + OdooToolkit factory + per-scope agent-toolkit services + generic read-only tools (odoo_query/odoo_describe/odoo_version) + OdooEntitySync + NorthData/OpenRegister company-enrichment providers + enrich_company tool. Ships as a kind:integration plugin; publishes 'odoo.client', 'odoo.cache', 'odoo.enrich', 'odoo.agentToolkit.*' services.",
   "license": "MIT",
   "scripts": {
     "build": "tsc",
