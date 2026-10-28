@@ -85,7 +85,7 @@ setup:
       > Handelsregister-Lookups brauchst.
   fields:
     - key: "odoo_url"
-      type: "string"
+      type: "url"
       label: "Odoo URL"
       help: "Base-URL der Odoo-Instanz, z.B. https://erp.example.com oder https://meinefirma.odoo.com. Kein trailing slash nötig."
       required: true
@@ -105,72 +105,72 @@ setup:
       help: "Rotierbar in Odoo → Profil → Accountsicherheit → New API Key."
       required: true
     - key: "odoo_proxy_max_bytes"
-      type: "string"
+      type: "integer"
       label: "Max Response-Size (Bytes)"
       help: "Kappt Odoo-Antworten über diesem Limit, um Memory-Blow-Ups bei großen search_reads zu verhindern. Default 500000."
       required: false
-      default: "500000"
+      default: 500000
     - key: "odoo_insecure_tls"
-      type: "string"
+      type: "boolean"
       label: "TLS-Verifizierung deaktivieren"
-      help: "Nur für lokalen Dev mit privatem CA-Cert: 'true' schaltet TLS-Verify für Odoo-Requests aus. Produktion MUSS leer oder 'false' bleiben."
+      help: "Nur für lokalen Dev mit privatem CA-Cert: schaltet TLS-Verify für Odoo-Requests aus. In Produktion MUSS das aus bleiben."
       required: false
-      default: "false"
+      default: false
 
     # ------------------------------------------------------------------
     # Generic read-only orchestrator tools (odoo_query / odoo_describe)
     # ------------------------------------------------------------------
     - key: "odoo_generic_read_enabled"
-      type: "string"
+      type: "boolean"
       label: "Generische Odoo-Read-Tools aktivieren"
-      help: "'true' registriert die orchestrator-weiten Tools `odoo_query` (search_read) und `odoo_describe` (Schema). Sie lesen über die HR-/Accounting-Scope-Grenze hinweg (model-auto-routing), bleiben aber strikt read-only und behalten die HR-Red-Line-Sperren (Gehälter, Bank-/Privatdaten). Default 'false' — ohne Aktivierung läuft Odoo-Zugriff nur über die Sub-Agents. Das `odoo_version`-Tool ist unabhängig davon immer aktiv."
+      help: "Registriert die orchestrator-weiten Tools `odoo_query` (search_read) und `odoo_describe` (Schema). Sie lesen über die HR-/Accounting-Scope-Grenze hinweg (model-auto-routing), bleiben aber strikt read-only und behalten die HR-Red-Line-Sperren (Gehälter, Bank-/Privatdaten). Default aus — ohne Aktivierung läuft Odoo-Zugriff nur über die Sub-Agents. Das `odoo_version`-Tool ist unabhängig davon immer aktiv."
       required: false
-      default: "false"
+      default: false
 
     # ------------------------------------------------------------------
     # Entity-Sync (proactive graph population via ctx.jobs.register)
     # ------------------------------------------------------------------
     - key: "odoo_entity_sync_enabled"
-      type: "string"
+      type: "boolean"
       label: "Entity-Sync aktivieren"
-      help: "'true' registriert einen Background-Job, der res.partner / hr.employee / hr.department / account.journal periodisch in den Knowledge-Graph spiegelt."
+      help: "Registriert einen Background-Job, der res.partner / hr.employee / hr.department / account.journal periodisch in den Knowledge-Graph spiegelt."
       required: false
-      default: "false"
+      default: false
     - key: "odoo_entity_sync_interval_hours"
-      type: "string"
+      type: "integer"
       label: "Entity-Sync Intervall (Stunden)"
       help: "Zwischen 1 und 168. Default 6h."
       required: false
-      default: "6"
+      default: 6
     - key: "odoo_entity_sync_page_size"
-      type: "string"
+      type: "integer"
       label: "Entity-Sync Page-Size"
       help: "Odoo search_read batch-Größe pro Call. Default 100."
       required: false
-      default: "100"
+      default: 100
     - key: "odoo_entity_sync_max_per_model"
-      type: "string"
+      type: "integer"
       label: "Entity-Sync Max pro Modell"
       help: "Hard-cap für Records pro Modell-Durchlauf, z.B. 5000 = max 5k Records pro res.partner-Sync. Default 5000."
       required: false
-      default: "5000"
+      default: 5000
 
     # ------------------------------------------------------------------
     # enrich_company tool — Handelsregister-Provider (OpenRegister / NorthData)
     # ------------------------------------------------------------------
     - key: "openregister_enabled"
-      type: "string"
+      type: "boolean"
       label: "OpenRegister aktivieren"
-      help: "'true' aktiviert den OpenRegister-Provider für das enrich_company-Tool. Gewinnt vor NorthData, wenn beide aktiv sind."
+      help: "Aktiviert den OpenRegister-Provider für das enrich_company-Tool. Gewinnt vor NorthData, wenn beide aktiv sind."
       required: false
-      default: "false"
+      default: false
     - key: "openregister_api_key"
       type: "secret"
       label: "OpenRegister API-Key"
       help: "Bearer-Token aus https://docs.openregister.de/authentication."
       required: false
     - key: "openregister_base_url"
-      type: "string"
+      type: "url"
       label: "OpenRegister Base-URL"
       help: "Default https://api.openregister.de."
       required: false
@@ -181,34 +181,41 @@ setup:
       required: false
       default: "2"
     - key: "openregister_cache_ttl_days"
-      type: "string"
+      type: "integer"
       label: "OpenRegister Cache-TTL (Tage)"
       required: false
-      default: "30"
+      default: 30
     - key: "openregister_max_bytes"
-      type: "string"
+      type: "integer"
       label: "OpenRegister Max Response-Size"
       required: false
-      default: "500000"
+      default: 500000
     - key: "openregister_fetch_level"
-      type: "string"
+      type: "enum"
+      enum:
+        - value: "minimal"
+          label: "minimal (1 Credit)"
+        - value: "standard"
+          label: "standard (3 Credits)"
+        - value: "full"
+          label: "full"
       label: "OpenRegister Fetch-Level"
-      help: "'minimal' (1 credit), 'standard' (3 credits, Default) oder 'full'."
+      help: "Wie viele Daten pro Lookup geholt werden. Default standard."
       required: false
       default: "standard"
     - key: "northdata_enabled"
-      type: "string"
+      type: "boolean"
       label: "NorthData aktivieren"
-      help: "'true' aktiviert den NorthData-Provider (Plan-B, nur wenn openregister_enabled=false)."
+      help: "Aktiviert den NorthData-Provider (Plan-B, nur wenn OpenRegister aus ist)."
       required: false
-      default: "false"
+      default: false
     - key: "northdata_api_key"
       type: "secret"
       label: "NorthData API-Key"
       help: "X-Api-Key aus https://www.northdata.com/doc (Premium-Plan)."
       required: false
     - key: "northdata_base_url"
-      type: "string"
+      type: "url"
       label: "NorthData Base-URL"
       required: false
       default: "https://www.northdata.com/_api"
@@ -218,15 +225,15 @@ setup:
       required: false
       default: "2"
     - key: "northdata_cache_ttl_days"
-      type: "string"
+      type: "integer"
       label: "NorthData Cache-TTL (Tage)"
       required: false
-      default: "30"
+      default: 30
     - key: "northdata_max_bytes"
-      type: "string"
+      type: "integer"
       label: "NorthData Max Response-Size"
       required: false
-      default: "500000"
+      default: 500000
 
 playbook:
   when_to_use: |

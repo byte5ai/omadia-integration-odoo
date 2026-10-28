@@ -5,17 +5,20 @@ import {
   verifyOdooConnection,
 } from './connectionStatus.js';
 
+import {
+  readBoolean,
+  readEnum,
+  readPositiveInt,
+  readPositiveNumber,
+  readString,
+} from './configValues.js';
 import { NorthDataClient } from './northDataClient.js';
 import { NorthDataIngest } from './northDataIngest.js';
 import { NorthDataResponseCache } from './northDataResponseCache.js';
 import { OdooClient } from './odooClient.js';
 import { OdooEntitySync } from './odooEntitySync.js';
 import { OdooResponseCache } from './odooResponseCache.js';
-import {
-  parseBoolean,
-  parsePositiveInt,
-  readOdooConnectionSettings,
-} from './odooSettings.js';
+import { readOdooConnectionSettings } from './odooSettings.js';
 import { OpenRegisterClient } from './openRegisterClient.js';
 import { OpenRegisterIngest } from './openRegisterIngest.js';
 import type { CompanyEnrichmentProvider } from './companyEnrichment.js';
@@ -101,22 +104,10 @@ const ENTITY_REF_BUS_SERVICE_NAME = 'entityRefBus';
 const ENRICH_COMPANY_PROMPT_DOC =
   '\n- `enrich_company`: Handelsregister-Stammdaten, Geschäftsführer, Gesellschafter + Bonitäts-Einschätzung (Status, EK-Signale) zu einer konkreten deutschen Firma. Quelle variiert je nach Konfiguration (OpenRegister / NorthData). READ-ONLY; schreibt nur in den Knowledge-Graph, niemals nach Odoo. Bei Mehrdeutigkeit (mehrere Treffer) NICHT selbst eine auswählen — dem User die Kandidatenliste vorlegen und nach Präzisierung (Name+Stadt oder stabile ID) fragen.\n';
 
+const FETCH_LEVELS = ['minimal', 'standard', 'full'] as const;
+
 export interface OdooPluginHandle {
   close(): Promise<void>;
-}
-
-function parsePositiveFloat(raw: string | undefined, fallback: number): number {
-  if (raw === undefined || raw === '') return fallback;
-  const n = Number.parseFloat(raw);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
-}
-
-function parseFetchLevel(
-  raw: string | undefined,
-): 'minimal' | 'standard' | 'full' {
-  const v = String(raw ?? '').trim().toLowerCase();
-  if (v === 'minimal' || v === 'full') return v;
-  return 'standard';
 }
 
 /**
@@ -134,8 +125,11 @@ export async function verifyConnection(
 
 export async function activate(ctx: PluginContext): Promise<OdooPluginHandle> {
   ctx.log('activating odoo integration');
+  const warn = (message: string): void => {
+    ctx.log(message);
+  };
 
-  const settings = await readOdooConnectionSettings(ctx);
+  const settings = await readOdooConnectionSettings(ctx, warn);
   const { url, db, login, maxBytes, insecureTls } = settings;
 
   // omadia#1453 — a key Odoo stops accepting while we run (revoked or
@@ -234,8 +228,11 @@ export async function activate(ctx: PluginContext): Promise<OdooPluginHandle> {
   );
   let disposeQueryTool: (() => void) | undefined;
   let disposeDescribeTool: (() => void) | undefined;
-  const genericReadEnabled = parseBoolean(
-    ctx.config.get<string>('odoo_generic_read_enabled'),
+  const genericReadEnabled = readBoolean(
+    'odoo_generic_read_enabled',
+    ctx.config.get<unknown>('odoo_generic_read_enabled'),
+    false,
+    warn,
   );
   if (genericReadEnabled) {
     disposeQueryTool = ctx.tools.register(
@@ -262,14 +259,20 @@ export async function activate(ctx: PluginContext): Promise<OdooPluginHandle> {
   // `ctx.services.get('knowledgeGraph')` is a pre-S+8 bridge (kernel pushes
   // itself into ServiceRegistry at boot); once the KG extraction lands, this
   // plugin's manifest gains `requires: ["knowledgeGraph@^1"]`.
-  const openRegisterEnabled = parseBoolean(
-    ctx.config.get<string>('openregister_enabled'),
+  const openRegisterEnabled = readBoolean(
+    'openregister_enabled',
+    ctx.config.get<unknown>('openregister_enabled'),
+    false,
+    warn,
   );
   const openRegisterApiKey = openRegisterEnabled
     ? await ctx.secrets.get('openregister_api_key')
     : undefined;
-  const northDataEnabled = parseBoolean(
-    ctx.config.get<string>('northdata_enabled'),
+  const northDataEnabled = readBoolean(
+    'northdata_enabled',
+    ctx.config.get<unknown>('northdata_enabled'),
+    false,
+    warn,
   );
   const northDataApiKey = northDataEnabled
     ? await ctx.secrets.get('northdata_api_key')
@@ -281,23 +284,34 @@ export async function activate(ctx: PluginContext): Promise<OdooPluginHandle> {
   let disposeEnrichTool: (() => void) | undefined;
 
   if (openRegisterEnabled && openRegisterApiKey) {
-    const orBaseUrl =
-      ctx.config.get<string>('openregister_base_url') ??
-      'https://api.openregister.de';
-    const orRps = parsePositiveFloat(
-      ctx.config.get<string>('openregister_rate_limit_rps'),
+    const orBaseUrl = readString(
+      ctx.config.get<unknown>('openregister_base_url'),
+      'https://api.openregister.de',
+    );
+    const orRps = readPositiveNumber(
+      'openregister_rate_limit_rps',
+      ctx.config.get<unknown>('openregister_rate_limit_rps'),
       2,
+      warn,
     );
-    const orMaxBytes = parsePositiveInt(
-      ctx.config.get<string>('openregister_max_bytes'),
+    const orMaxBytes = readPositiveInt(
+      'openregister_max_bytes',
+      ctx.config.get<unknown>('openregister_max_bytes'),
       500_000,
+      warn,
     );
-    const orCacheTtlDays = parsePositiveInt(
-      ctx.config.get<string>('openregister_cache_ttl_days'),
+    const orCacheTtlDays = readPositiveInt(
+      'openregister_cache_ttl_days',
+      ctx.config.get<unknown>('openregister_cache_ttl_days'),
       30,
+      warn,
     );
-    const orFetchLevel = parseFetchLevel(
-      ctx.config.get<string>('openregister_fetch_level'),
+    const orFetchLevel = readEnum(
+      'openregister_fetch_level',
+      ctx.config.get<unknown>('openregister_fetch_level'),
+      FETCH_LEVELS,
+      'standard',
+      warn,
     );
     const orClient = new OpenRegisterClient({
       apiKey: openRegisterApiKey,
@@ -325,20 +339,27 @@ export async function activate(ctx: PluginContext): Promise<OdooPluginHandle> {
     });
     enrichLabel = `openregister(fetch=${orFetchLevel}, rate=${String(orRps)}rps, ttl=${String(orCacheTtlDays)}d)`;
   } else if (northDataEnabled && northDataApiKey) {
-    const ndBaseUrl =
-      ctx.config.get<string>('northdata_base_url') ??
-      'https://www.northdata.com/_api';
-    const ndRps = parsePositiveFloat(
-      ctx.config.get<string>('northdata_rate_limit_rps'),
+    const ndBaseUrl = readString(
+      ctx.config.get<unknown>('northdata_base_url'),
+      'https://www.northdata.com/_api',
+    );
+    const ndRps = readPositiveNumber(
+      'northdata_rate_limit_rps',
+      ctx.config.get<unknown>('northdata_rate_limit_rps'),
       2,
+      warn,
     );
-    const ndMaxBytes = parsePositiveInt(
-      ctx.config.get<string>('northdata_max_bytes'),
+    const ndMaxBytes = readPositiveInt(
+      'northdata_max_bytes',
+      ctx.config.get<unknown>('northdata_max_bytes'),
       500_000,
+      warn,
     );
-    const ndCacheTtlDays = parsePositiveInt(
-      ctx.config.get<string>('northdata_cache_ttl_days'),
+    const ndCacheTtlDays = readPositiveInt(
+      'northdata_cache_ttl_days',
+      ctx.config.get<unknown>('northdata_cache_ttl_days'),
       30,
+      warn,
     );
     const ndClient = new NorthDataClient({
       apiKey: northDataApiKey,
@@ -395,8 +416,11 @@ export async function activate(ctx: PluginContext): Promise<OdooPluginHandle> {
   // quickly; subsequent runs go through the scheduler.
   let disposeEntitySync: (() => void) | undefined;
   let initialSyncTimer: NodeJS.Timeout | undefined;
-  const entitySyncEnabled = parseBoolean(
-    ctx.config.get<string>('odoo_entity_sync_enabled'),
+  const entitySyncEnabled = readBoolean(
+    'odoo_entity_sync_enabled',
+    ctx.config.get<unknown>('odoo_entity_sync_enabled'),
+    false,
+    warn,
   );
   if (entitySyncEnabled) {
     const graphForSync = ctx.services.get<KnowledgeGraph>(
@@ -407,17 +431,23 @@ export async function activate(ctx: PluginContext): Promise<OdooPluginHandle> {
         `[odoo] odoo_entity_sync_enabled=true requires '${KNOWLEDGE_GRAPH_SERVICE_NAME}' service (kernel must publish before plugin activation)`,
       );
     }
-    const intervalHours = parsePositiveInt(
-      ctx.config.get<string>('odoo_entity_sync_interval_hours'),
+    const intervalHours = readPositiveInt(
+      'odoo_entity_sync_interval_hours',
+      ctx.config.get<unknown>('odoo_entity_sync_interval_hours'),
       6,
+      warn,
     );
-    const pageSize = parsePositiveInt(
-      ctx.config.get<string>('odoo_entity_sync_page_size'),
+    const pageSize = readPositiveInt(
+      'odoo_entity_sync_page_size',
+      ctx.config.get<unknown>('odoo_entity_sync_page_size'),
       100,
+      warn,
     );
-    const maxPerModel = parsePositiveInt(
-      ctx.config.get<string>('odoo_entity_sync_max_per_model'),
+    const maxPerModel = readPositiveInt(
+      'odoo_entity_sync_max_per_model',
+      ctx.config.get<unknown>('odoo_entity_sync_max_per_model'),
       5000,
+      warn,
     );
     const sync = new OdooEntitySync({
       odoo: client,
