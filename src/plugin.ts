@@ -1,4 +1,9 @@
-import type { PluginContext } from '@omadia/plugin-api';
+import type { PluginConnectionVerdict, PluginContext } from '@omadia/plugin-api';
+
+import {
+  createAuthStatusReporter,
+  verifyOdooConnection,
+} from './connectionStatus.js';
 
 import {
   readBoolean,
@@ -13,6 +18,7 @@ import { NorthDataResponseCache } from './northDataResponseCache.js';
 import { OdooClient } from './odooClient.js';
 import { OdooEntitySync } from './odooEntitySync.js';
 import { OdooResponseCache } from './odooResponseCache.js';
+import { readOdooConnectionSettings } from './odooSettings.js';
 import { OpenRegisterClient } from './openRegisterClient.js';
 import { OpenRegisterIngest } from './openRegisterIngest.js';
 import type { CompanyEnrichmentProvider } from './companyEnrichment.js';
@@ -104,36 +110,34 @@ export interface OdooPluginHandle {
   close(): Promise<void>;
 }
 
+/**
+ * omadia#1453 — optional connection probe, called by the kernel (plugin-api
+ * >= 1.35.0) after every activation and from the operator-triggered verify
+ * endpoint. One fresh `common.authenticate`: accepted ⇒ `connected`;
+ * `authenticate → false` / HTTP 401 ⇒ `rejected`; anything else ⇒
+ * `inconclusive`. Never throws. Older hosts ignore the export.
+ */
+export async function verifyConnection(
+  ctx: PluginContext,
+): Promise<PluginConnectionVerdict> {
+  return verifyOdooConnection(ctx);
+}
+
 export async function activate(ctx: PluginContext): Promise<OdooPluginHandle> {
   ctx.log('activating odoo integration');
   const warn = (message: string): void => {
     ctx.log(message);
   };
 
-  const apiKey = await ctx.secrets.require('odoo_api_key');
-  const url = ctx.config.require<string>('odoo_url');
-  const db = ctx.config.require<string>('odoo_db');
-  const login = ctx.config.require<string>('odoo_login');
-  const maxBytes = readPositiveInt(
-    'odoo_proxy_max_bytes',
-    ctx.config.get<unknown>('odoo_proxy_max_bytes'),
-    500_000,
-    warn,
-  );
-  const insecureTls = readBoolean(
-    'odoo_insecure_tls',
-    ctx.config.get<unknown>('odoo_insecure_tls'),
-    false,
-    warn,
-  );
+  const settings = await readOdooConnectionSettings(ctx, warn);
+  const { url, db, login, maxBytes, insecureTls } = settings;
 
+  // omadia#1453 — a key Odoo stops accepting while we run (revoked or
+  // expired upstream) surfaces on the store badge + tool gate at the first
+  // real call, instead of only as tool text in a chat turn.
   const client = new OdooClient({
-    url,
-    db,
-    login,
-    apiKey,
-    maxBytes,
-    insecureTls,
+    ...settings,
+    authObserver: createAuthStatusReporter(ctx.status),
   });
   const cache = new OdooResponseCache();
 

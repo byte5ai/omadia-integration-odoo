@@ -75,8 +75,17 @@ interface OdooExecuteRequest {
 class OdooClientError extends Error {
   readonly status: number;          // upstream HTTP status when known
   readonly upstreamBody?: string;   // truncated upstream body
+  // Set ONLY when Odoo explicitly refused the credentials:
+  // "protocol_auth_failure" (authenticate → false) or "http_401".
+  // 5xx, timeouts and network errors never carry it.
+  readonly authRejection?: "protocol_auth_failure" | "http_401";
 }
 ```
+
+An auth rejection on the shared client is also reported by this integration
+itself through `ctx.status` (omadia#1453), so the store badge and the tool
+gate show a revoked key without a chat turn. Consumers do not need to report
+it again.
 
 ## Concrete Snippets
 
