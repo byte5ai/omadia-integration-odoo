@@ -1,17 +1,55 @@
 import { Agent as UndiciAgent, fetch as undiciFetch } from 'undici';
-import type { PluginContext } from '@omadia/plugin-api';
+import type { ConnectionRejectionCause, PluginContext } from '@omadia/plugin-api';
 import type { OdooClientConfig } from './kernel-types.js';
+
+/**
+ * Issue omadia#1453 — the two ways Odoo explicitly refuses our credentials.
+ * `protocol_auth_failure`: `common.authenticate` answered something other than
+ * a positive uid (Odoo says "wrong key" with `false` over HTTP 200).
+ * `http_401`: the endpoint itself answered 401 (e.g. a reverse proxy in front
+ * of Odoo). Everything else — 5xx, timeouts, DNS, unparseable bodies — is NOT
+ * an auth verdict and carries no rejection.
+ */
+export type OdooAuthRejection = Extract<
+  ConnectionRejectionCause,
+  'protocol_auth_failure' | 'http_401'
+>;
 
 export class OdooClientError extends Error {
   public readonly status: number;
   public readonly upstreamBody?: string;
+  /** Set only when Odoo explicitly refused the credentials. */
+  public readonly authRejection?: OdooAuthRejection;
 
-  constructor(message: string, status: number, upstreamBody?: string) {
+  constructor(
+    message: string,
+    status: number,
+    upstreamBody?: string,
+    authRejection?: OdooAuthRejection,
+  ) {
     super(message);
     this.name = 'OdooClientError';
     this.status = status;
     this.upstreamBody = upstreamBody;
+    this.authRejection = authRejection;
   }
+}
+
+/** The explicit credential refusal carried by `err`, or `undefined`. */
+export function authRejectionOf(err: unknown): OdooAuthRejection | undefined {
+  return err instanceof OdooClientError ? err.authRejection : undefined;
+}
+
+/**
+ * Issue omadia#1453 — notified about the auth outcome of every `execute()`
+ * call, so the plugin can surface a key that Odoo stopped accepting while the
+ * plugin is running (revoked/expired upstream) without waiting for a chat turn.
+ */
+export interface OdooAuthObserver {
+  /** Odoo explicitly refused the credentials on a real call. */
+  onAuthRejected(cause: OdooAuthRejection): void;
+  /** A real, authenticated call succeeded. */
+  onAuthAccepted(): void;
 }
 
 interface OdooClientOptions {
@@ -24,6 +62,7 @@ interface OdooClientOptions {
    * local dev against a private-CA-signed Odoo; never enable in production. */
   insecureTls?: boolean;
   fetchImpl?: typeof fetch;
+  authObserver?: OdooAuthObserver;
 }
 
 export interface OdooExecuteRequest {
@@ -53,6 +92,7 @@ export class OdooClient {
   private readonly apiKey: string;
   private readonly maxBytes: number;
   private readonly fetchImpl: typeof fetch;
+  private readonly authObserver: OdooAuthObserver | undefined;
 
   private uidPromise: Promise<number> | undefined;
 
@@ -62,6 +102,7 @@ export class OdooClient {
     this.login = opts.login;
     this.apiKey = opts.apiKey;
     this.maxBytes = opts.maxBytes;
+    this.authObserver = opts.authObserver;
     if (opts.fetchImpl) {
       this.fetchImpl = opts.fetchImpl;
     } else if (opts.insecureTls) {
@@ -159,6 +200,18 @@ export class OdooClient {
     return this.uidPromise;
   }
 
+  /**
+   * Issue omadia#1453 — ask Odoo whether the credentials are accepted right
+   * now. Always a fresh `common.authenticate` (never the cached uid), so a key
+   * revoked since the last call is noticed. Resolves on acceptance; rejects
+   * with an `OdooClientError` otherwise — check `authRejectionOf(err)` to tell
+   * an explicit refusal from an outage. Does not notify the auth observer:
+   * the caller (the kernel's connection probe) records its own verdict.
+   */
+  async checkCredentials(): Promise<void> {
+    await this.authenticate();
+  }
+
   private async authenticate(): Promise<number> {
     const response = await this.rpc({
       service: 'common',
@@ -169,12 +222,27 @@ export class OdooClient {
       throw new OdooClientError(
         `Odoo authentication failed: unexpected response ${JSON.stringify(response)}`,
         401,
+        undefined,
+        'protocol_auth_failure',
       );
     }
     return response;
   }
 
   async execute(req: OdooExecuteRequest): Promise<unknown> {
+    let result: unknown;
+    try {
+      result = await this.executeWithSessionRetry(req);
+    } catch (err) {
+      const rejection = authRejectionOf(err);
+      if (rejection) this.notifyObserver((o) => o.onAuthRejected(rejection));
+      throw err;
+    }
+    this.notifyObserver((o) => o.onAuthAccepted());
+    return result;
+  }
+
+  private async executeWithSessionRetry(req: OdooExecuteRequest): Promise<unknown> {
     try {
       return await this.executeOnce(req);
     } catch (err) {
@@ -183,6 +251,20 @@ export class OdooClient {
         return this.executeOnce(req);
       }
       throw err;
+    }
+  }
+
+  /** A failing observer must never turn a successful Odoo call into an error
+   *  or mask the original one. */
+  private notifyObserver(fn: (observer: OdooAuthObserver) => void): void {
+    if (!this.authObserver) return;
+    try {
+      fn(this.authObserver);
+    } catch (err) {
+      console.error(
+        '[odoo-client] auth observer failed:',
+        err instanceof Error ? err.message : err,
+      );
     }
   }
 
@@ -216,6 +298,7 @@ export class OdooClient {
         `Odoo HTTP ${response.status}`,
         response.status,
         text === TRUNCATED ? undefined : text,
+        response.status === 401 ? 'http_401' : undefined,
       );
     }
 

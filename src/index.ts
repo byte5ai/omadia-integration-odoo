@@ -8,11 +8,22 @@
  * classes from here to preserve behaviour during the move.
  */
 
-export { OdooClient, OdooClientError } from './odooClient.js';
-export type { OdooExecuteRequest } from './odooClient.js';
+export { OdooClient, OdooClientError, authRejectionOf } from './odooClient.js';
+export type {
+  OdooAuthObserver,
+  OdooAuthRejection,
+  OdooExecuteRequest,
+} from './odooClient.js';
+
+export {
+  createAuthStatusReporter,
+  verifyOdooConnection,
+} from './connectionStatus.js';
+export type { OdooProbeClientFactory } from './connectionStatus.js';
 
 export {
   activate,
+  verifyConnection,
   ODOO_CLIENT_SERVICE_NAME,
   ODOO_CACHE_SERVICE_NAME,
   ODOO_ENRICH_SERVICE_NAME,

@@ -3,7 +3,7 @@ schema_version: "1"
 identity:
   id: "@omadia/integration-odoo"
   name: "Odoo Connector"
-  version: "0.2.1"
+  version: "0.3.0"
   kind: "integration"
   domain: "odoo"
   description: "Gemeinsamer Odoo-JSON-RPC-Layer (read-only) für alle Odoo-Konsumenten + Handelsregister-Enrichment (OpenRegister / NorthData). Publishes kernel-Services 'odoo.client' (OdooClient), 'odoo.cache' (OdooResponseCache), 'odoo.enrich' (CompanyEnrichmentProvider) + per-Scope Agent-Toolkits 'odoo.agentToolkit.{accounting,hr}' (query_graph + odoo_execute); contributes den native `odoo_version`-Tool und — optional via odoo_generic_read_enabled — die generischen Read-Tools `odoo_query` / `odoo_describe` sowie `enrich_company` via ctx.tools.register."
