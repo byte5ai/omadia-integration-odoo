@@ -51,6 +51,13 @@ class OdooClient {
   // Throws OdooClientError on auth failure.
   async getUid(): Promise<number>;
 
+  // The database every call runs against. The configured `odoo_db`, or —
+  // when the setup left it empty — the first database Odoo lists at
+  // `/web/database/list` (looked up once, then cached). Throws
+  // OdooClientError when the list is empty or the server does not publish
+  // it (`list_db = False`); that error is never an auth rejection.
+  async getDb(): Promise<string>;
+
   // Single execute_kw call. THIS is the only method you call for reads/writes.
   // The client wraps this in a UID-aware retry on session-error.
   async execute(req: OdooExecuteRequest): Promise<unknown>;

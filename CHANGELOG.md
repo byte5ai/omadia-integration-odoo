@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.4.0
+
+- `odoo_db` is optional. Left empty, the connector uses the first database
+  the instance lists at `/web/database/list` (the same JSON-RPC endpoint the
+  Odoo database selector uses), so a single-database instance needs only URL,
+  login and API key.
+  - The name is looked up once per client and logged
+    (`[odoo-client] no database configured — using "<db>" …`). A failed
+    lookup is not cached, so the next call asks again.
+  - A server that does not publish its list (`list_db = False`) or lists no
+    database raises an `OdooClientError` that names the setup field to fill
+    in. It never counts as a credential rejection: `verifyConnection`
+    reports `inconclusive`, and `execute()` does not retry it as an expired
+    session.
+  - Instances with several databases should keep naming one: the first
+    listed entry is not guaranteed to be the one you mean.
+  - New `OdooClient.getDb()` returns the database in use. `fromConfig` no
+    longer requires `ODOO_DB`.
+- Setup form: the field is now "Datenbank-Name (optional)", and its help text
+  and the setup guide (en/de) explain the fallback and when to set it.
+  Existing installs keep their configured database.
+
 ## 0.3.0
 
 - Report rejected Odoo credentials to the operator (omadia#1453). A wrong,

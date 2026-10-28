@@ -58,9 +58,9 @@ import {
  *
  * Required config (via `ctx.config`):
  *   - `odoo_url`     base URL of the Odoo instance
- *   - `odoo_db`      database name
  *   - `odoo_login`   technical-user e-mail for JSON-RPC auth
  * Optional config:
+ *   - `odoo_db`      database name; empty = first one Odoo lists
  *   - `odoo_proxy_max_bytes` default 500000 — caps response payload size
  *   - `odoo_insecure_tls`    default 'false' — dev-only TLS bypass
  *
@@ -248,7 +248,7 @@ export async function activate(ctx: PluginContext): Promise<OdooPluginHandle> {
   }
 
   ctx.log(
-    `[odoo] ready (url=${url}, db=${db}, login=${login}, maxBytes=${String(maxBytes)}, insecureTls=${String(insecureTls)}) — services '${ODOO_CLIENT_SERVICE_NAME}' + '${ODOO_CACHE_SERVICE_NAME}' + '${ODOO_EXECUTE_TOOL_ACCOUNTING_SERVICE_NAME}' + '${ODOO_EXECUTE_TOOL_HR_SERVICE_NAME}' published; tools: odoo_version${genericReadEnabled ? ' + odoo_query + odoo_describe' : ' (generic read disabled)'}`,
+    `[odoo] ready (url=${url}, db=${db ?? '(first listed)'}, login=${login}, maxBytes=${String(maxBytes)}, insecureTls=${String(insecureTls)}) — services '${ODOO_CLIENT_SERVICE_NAME}' + '${ODOO_CACHE_SERVICE_NAME}' + '${ODOO_EXECUTE_TOOL_ACCOUNTING_SERVICE_NAME}' + '${ODOO_EXECUTE_TOOL_HR_SERVICE_NAME}' published; tools: odoo_version${genericReadEnabled ? ' + odoo_query + odoo_describe' : ' (generic read disabled)'}`,
   );
 
   // --- enrich_company provider + tool ---------------------------------------
