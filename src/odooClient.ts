@@ -54,7 +54,9 @@ export interface OdooAuthObserver {
 
 interface OdooClientOptions {
   url: string;
-  db: string;
+  /** Odoo database name. Empty or absent: use the first database the
+   * instance lists at `/web/database/list`. */
+  db?: string;
   login: string;
   apiKey: string;
   maxBytes: number;
@@ -87,7 +89,8 @@ export interface OdooServerVersion {
  */
 export class OdooClient {
   private readonly url: string;
-  private readonly db: string;
+  /** Set when the operator named a database; otherwise discovered once. */
+  private readonly configuredDb: string | undefined;
   private readonly login: string;
   private readonly apiKey: string;
   private readonly maxBytes: number;
@@ -95,10 +98,11 @@ export class OdooClient {
   private readonly authObserver: OdooAuthObserver | undefined;
 
   private uidPromise: Promise<number> | undefined;
+  private dbPromise: Promise<string> | undefined;
 
   constructor(opts: OdooClientOptions) {
     this.url = opts.url.replace(/\/+$/, '');
-    this.db = opts.db;
+    this.configuredDb = opts.db?.trim() || undefined;
     this.login = opts.login;
     this.apiKey = opts.apiKey;
     this.maxBytes = opts.maxBytes;
@@ -128,7 +132,7 @@ export class OdooClient {
   }
 
   static fromConfig(config: OdooClientConfig): OdooClient {
-    if (!config.ODOO_URL || !config.ODOO_DB || !config.ODOO_LOGIN || !config.ODOO_API_KEY) {
+    if (!config.ODOO_URL || !config.ODOO_LOGIN || !config.ODOO_API_KEY) {
       throw new Error('OdooClient.fromConfig called without required secrets');
     }
     return new OdooClient({
@@ -153,7 +157,7 @@ export class OdooClient {
   ): Promise<OdooClient> {
     const apiKey = await ctx.secrets.require('odoo_api_key');
     const url = ctx.config.require<string>('odoo_url');
-    const db = ctx.config.require<string>('odoo_db');
+    const db = ctx.config.get<string>('odoo_db');
     const login = ctx.config.require<string>('odoo_login');
     return new OdooClient({
       url,
@@ -187,6 +191,52 @@ export class OdooClient {
     return (result ?? {}) as OdooServerVersion;
   }
 
+  /**
+   * The database every call runs against: the configured one, or the first
+   * entry of Odoo's `/web/database/list` when the setup left it empty. The
+   * discovered name is cached for the client's lifetime; a failed lookup is
+   * not, so the next call asks again.
+   */
+  async getDb(): Promise<string> {
+    if (this.configuredDb) return this.configuredDb;
+    if (!this.dbPromise) {
+      this.dbPromise = this.discoverDb().catch((err) => {
+        this.dbPromise = undefined;
+        throw err;
+      });
+    }
+    return this.dbPromise;
+  }
+
+  private async discoverDb(): Promise<string> {
+    let listed: unknown;
+    try {
+      listed = await this.postJsonRpc('/web/database/list', {});
+    } catch (err) {
+      // Typically `list_db = False` on the server. Not a credential verdict,
+      // and no upstream body, so it never reads as an expired session.
+      const reason = err instanceof Error ? err.message : String(err);
+      throw new OdooClientError(
+        `Odoo database list unavailable (${reason}) — set the database name in the setup`,
+        err instanceof OdooClientError ? err.status : 502,
+      );
+    }
+    const names = Array.isArray(listed)
+      ? listed.filter((n): n is string => typeof n === 'string' && n !== '')
+      : [];
+    const first = names[0];
+    if (!first) {
+      throw new OdooClientError(
+        'Odoo lists no database — set the database name in the setup',
+        404,
+      );
+    }
+    console.log(
+      `[odoo-client] no database configured — using "${first}" (first of ${String(names.length)} listed by ${this.url})`,
+    );
+    return first;
+  }
+
   /** Returns the cached UID or authenticates on demand. */
   async getUid(): Promise<number> {
     if (!this.uidPromise) {
@@ -213,10 +263,11 @@ export class OdooClient {
   }
 
   private async authenticate(): Promise<number> {
+    const db = await this.getDb();
     const response = await this.rpc({
       service: 'common',
       method: 'authenticate',
-      args: [this.db, this.login, this.apiKey, {}],
+      args: [db, this.login, this.apiKey, {}],
     });
     if (typeof response !== 'number' || !Number.isInteger(response) || response <= 0) {
       throw new OdooClientError(
@@ -270,10 +321,11 @@ export class OdooClient {
 
   private async executeOnce(req: OdooExecuteRequest): Promise<unknown> {
     const uid = await this.getUid();
+    const db = await this.getDb();
     return this.rpc({
       service: 'object',
       method: 'execute_kw',
-      args: [this.db, uid, this.apiKey, req.model, req.method, req.positionalArgs, req.kwargs],
+      args: [db, uid, this.apiKey, req.model, req.method, req.positionalArgs, req.kwargs],
     });
   }
 
@@ -282,8 +334,12 @@ export class OdooClient {
     method: string;
     args: unknown[];
   }): Promise<unknown> {
+    return this.postJsonRpc('/jsonrpc', params);
+  }
+
+  private async postJsonRpc(path: string, params: object): Promise<unknown> {
     const body = JSON.stringify({ jsonrpc: '2.0', method: 'call', params });
-    const response = await this.fetchImpl(`${this.url}/jsonrpc`, {
+    const response = await this.fetchImpl(`${this.url}${path}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

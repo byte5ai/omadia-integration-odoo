@@ -3,7 +3,7 @@ schema_version: "1"
 identity:
   id: "@omadia/integration-odoo"
   name: "Odoo Connector"
-  version: "0.3.0"
+  version: "0.4.0"
   kind: "integration"
   domain: "odoo"
   description: "Gemeinsamer Odoo-JSON-RPC-Layer (read-only) für alle Odoo-Konsumenten + Handelsregister-Enrichment (OpenRegister / NorthData). Publishes kernel-Services 'odoo.client' (OdooClient), 'odoo.cache' (OdooResponseCache), 'odoo.enrich' (CompanyEnrichmentProvider) + per-Scope Agent-Toolkits 'odoo.agentToolkit.{accounting,hr}' (query_graph + odoo_execute); contributes den native `odoo_version`-Tool und — optional via odoo_generic_read_enabled — die generischen Read-Tools `odoo_query` / `odoo_describe` sowie `enrich_company` via ctx.tools.register."
@@ -47,12 +47,16 @@ setup:
       ## Set up the Odoo connection
 
       The integration talks to Odoo's **External API** (JSON-RPC, read-only) with
-      an **API key** instead of a password. You need four values:
+      an **API key** instead of a password. You need three values, a fourth
+      is optional:
 
       1. **Odoo URL**: your instance, e.g. `https://erp.example.com` or
          `https://yourco.odoo.com` (no trailing slash needed).
-      2. **Database**: the Odoo database name (for SaaS instances usually the
-         subdomain part).
+      2. **Database** (optional): the Odoo database name (for SaaS instances
+         usually the subdomain part). Leave it empty and the connector uses
+         the first database the instance lists at `/web/database/list`. Set
+         it when the instance hosts several databases or does not publish its
+         database list (`list_db = False`).
       3. **API Login**: the email of a technical user account used for JSON-RPC.
       4. **API Key**: in Odoo → **Profile → Account Security → New API Key** →
          copy → field **API key**.
@@ -67,12 +71,16 @@ setup:
       ## Odoo-Verbindung einrichten
 
       Die Integration spricht Odoos **External API** (JSON-RPC, read-only) mit
-      einem **API-Key** statt Passwort. Du brauchst vier Werte:
+      einem **API-Key** statt Passwort. Du brauchst drei Werte, ein vierter
+      ist optional:
 
       1. **Odoo URL**: deine Instanz, z.B. `https://erp.example.com` oder
          `https://deinefirma.odoo.com` (kein trailing slash nötig).
-      2. **Datenbank**: Name der Odoo-Datenbank (bei SaaS-Instanzen meist der
-         Subdomain-Teil).
+      2. **Datenbank** (optional): Name der Odoo-Datenbank (bei SaaS-Instanzen
+         meist der Subdomain-Teil). Bleibt das Feld leer, nimmt der Connector
+         die erste Datenbank, die die Instanz unter `/web/database/list`
+         ausgibt. Trag den Namen ein, wenn die Instanz mehrere Datenbanken hat
+         oder ihre Datenbankliste nicht herausgibt (`list_db = False`).
       3. **API-Login**: E-Mail eines Technical-User-Accounts für JSON-RPC.
       4. **API-Key**: in Odoo → **Profil → Accountsicherheit → New API Key** →
          kopieren → Feld **API-Key**.
@@ -91,9 +99,9 @@ setup:
       required: true
     - key: "odoo_db"
       type: "string"
-      label: "Datenbank-Name"
-      help: "Name der Odoo-Datenbank — bei SaaS-Instanzen der Subdomain-Teil."
-      required: true
+      label: "Datenbank-Name (optional)"
+      help: "Name der Odoo-Datenbank — bei SaaS-Instanzen der Subdomain-Teil. Leer lassen: der Connector nimmt die erste Datenbank, die die Instanz unter /web/database/list ausgibt. Eintragen, wenn die Instanz mehrere Datenbanken hat oder die Liste gesperrt ist (list_db = False)."
+      required: false
     - key: "odoo_login"
       type: "string"
       label: "API-Login"
@@ -239,8 +247,8 @@ playbook:
   when_to_use: |
     Wird implizit installiert, wenn ein Odoo-Konsument (Odoo-HR-Sub-Agent,
     Odoo-Accounting-Sub-Agent, zukünftig weitere) installiert wird —
-    oder automatisch bei Boot, wenn ODOO_URL/ODOO_DB/ODOO_LOGIN/ODOO_API_KEY
-    in der .env stehen. Endanwender adressieren dieses Paket nicht direkt —
+    oder automatisch bei Boot, wenn ODOO_URL/ODOO_LOGIN/ODOO_API_KEY (optional
+    ODOO_DB) in der .env stehen. Endanwender adressieren dieses Paket nicht direkt —
     es liefert den geteilten Odoo-Client + Response-Cache via
     Service-Registry.
 
@@ -259,7 +267,7 @@ permissions:
 integrations:
   - id: "odoo_jsonrpc"
     kind: "http"
-    target: "Odoo JSON-RPC (/jsonrpc + /web/session/authenticate)"
+    target: "Odoo JSON-RPC (/jsonrpc + /web/session/authenticate; /web/database/list when no database is configured)"
     auth_from: "odoo_api_key"
     docs: "https://www.odoo.com/documentation/17.0/developer/reference/external_api.html"
   - id: "openregister"
