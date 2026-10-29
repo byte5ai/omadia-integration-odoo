@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.1
+
+Follow-ups to the optional `odoo_db` (0.4.0):
+
+- A login that fails against a *discovered* database now names that
+  database and says to set the field if the instance has several. It stays a
+  `protocol_auth_failure`: Odoo answers `false` for a wrong key and for a
+  user missing from the database alike.
+- HTTP 401 on `/web/database/list` (e.g. a proxy blocking `/web/database/*`)
+  now reads as "database list unavailable" with status 502. Before, it kept
+  status 401 and triggered one useless session retry.
+- `OdooClient.fromContext` reads `odoo_db` the same way the setup reader
+  does (trimmed, non-string ignored). Before, a non-string value threw on
+  `.trim()`.
+
 ## 0.4.0
 
 - `odoo_db` is optional. Left empty, the connector uses the first database

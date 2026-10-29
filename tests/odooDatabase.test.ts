@@ -21,9 +21,13 @@ function jsonResponse(payload: unknown, status = 200): Response {
 
 /**
  * Fake Odoo: `/web/database/list` answers `listResponse`, `authenticate`
- * answers uid 7, `execute_kw` answers an empty result. Records every call.
+ * answers `authResult` (uid 7 by default), `execute_kw` answers an empty
+ * result. Records every call.
  */
-function fakeOdoo(listResponse: () => Response): { fetchImpl: typeof fetch; calls: Call[] } {
+function fakeOdoo(
+  listResponse: () => Response,
+  authResult: unknown = 7,
+): { fetchImpl: typeof fetch; calls: Call[] } {
   const calls: Call[] = [];
   const fetchImpl = (async (url: unknown, init?: { body?: unknown }) => {
     const path = new URL(String(url)).pathname;
@@ -33,7 +37,7 @@ function fakeOdoo(listResponse: () => Response): { fetchImpl: typeof fetch; call
     calls.push({ path, method: body.params.method, args: body.params.args });
     if (path === '/web/database/list') return listResponse();
     if (body.params.method === 'authenticate') {
-      return jsonResponse({ jsonrpc: '2.0', id: null, result: 7 });
+      return jsonResponse({ jsonrpc: '2.0', id: null, result: authResult });
     }
     return jsonResponse({ jsonrpc: '2.0', id: null, result: [] });
   }) as unknown as typeof fetch;
@@ -137,6 +141,38 @@ describe('optional odoo_db: database resolution', () => {
     // no session retry: the list is asked exactly once
     assert.equal(calls.filter((c) => c.path === '/web/database/list').length, 1);
   });
+
+  it('HTTP 401 on the list (proxy) ⇒ list unavailable, no auth verdict, no session retry', async () => {
+    const { fetchImpl, calls } = fakeOdoo(() => new Response('unauthorized', { status: 401 }));
+    await assert.rejects(clientFor(fetchImpl).execute(EXEC_REQ), (err: unknown) => {
+      assert.ok(err instanceof OdooClientError);
+      assert.notEqual(err.status, 401);
+      assert.equal(err.authRejection, undefined);
+      assert.match(err.message, /database list unavailable \(Odoo HTTP 401\)/);
+      return true;
+    });
+    assert.equal(calls.filter((c) => c.path === '/web/database/list').length, 1);
+  });
+
+  it('authenticate → false with a discovered database ⇒ still a rejection, the message names the database', async () => {
+    const { fetchImpl } = fakeOdoo(listed(['first-db', 'second-db']), false);
+    await assert.rejects(clientFor(fetchImpl).execute(EXEC_REQ), (err: unknown) => {
+      assert.ok(err instanceof OdooClientError);
+      assert.equal(err.authRejection, 'protocol_auth_failure');
+      assert.match(err.message, /database "first-db" is the first one Odoo lists/);
+      return true;
+    });
+  });
+
+  it('authenticate → false with a configured database ⇒ no database hint', async () => {
+    const { fetchImpl } = fakeOdoo(listed(['other']), false);
+    await assert.rejects(clientFor(fetchImpl, 'prod').execute(EXEC_REQ), (err: unknown) => {
+      assert.ok(err instanceof OdooClientError);
+      assert.equal(err.authRejection, 'protocol_auth_failure');
+      assert.doesNotMatch(err.message, /first one Odoo lists/);
+      return true;
+    });
+  });
 });
 
 // --- setup values ------------------------------------------------------------------
@@ -210,5 +246,22 @@ describe('optional odoo_db: setup values', () => {
     );
     assert.equal(verdict.status, 'inconclusive');
     assert.ok(logs.some((l) => l.includes('database list unavailable')));
+  });
+
+  for (const [label, value] of [
+    ['absent', undefined],
+    ['blank', '   '],
+    ['non-string', 42],
+  ] as const) {
+    it(`OdooClient.fromContext: ${label} odoo_db ⇒ builds a client that discovers the database`, async () => {
+      const { ctx } = fakeCtx(value === undefined ? base : { ...base, odoo_db: value });
+      await OdooClient.fromContext(ctx, { maxBytes: 500_000, insecureTls: false });
+    });
+  }
+
+  it('OdooClient.fromContext: a set odoo_db is used trimmed', async () => {
+    const { ctx } = fakeCtx({ ...base, odoo_db: '  prod  ' });
+    const client = await OdooClient.fromContext(ctx, { maxBytes: 500_000, insecureTls: false });
+    assert.equal(await client.getDb(), 'prod');
   });
 });
