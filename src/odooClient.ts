@@ -1,5 +1,6 @@
 import { Agent as UndiciAgent, fetch as undiciFetch } from 'undici';
 import type { ConnectionRejectionCause, PluginContext } from '@omadia/plugin-api';
+import { readString } from './configValues.js';
 import type { OdooClientConfig } from './kernel-types.js';
 
 /**
@@ -157,7 +158,7 @@ export class OdooClient {
   ): Promise<OdooClient> {
     const apiKey = await ctx.secrets.require('odoo_api_key');
     const url = ctx.config.require<string>('odoo_url');
-    const db = ctx.config.get<string>('odoo_db');
+    const db = readString(ctx.config.get<unknown>('odoo_db'), '') || undefined;
     const login = ctx.config.require<string>('odoo_login');
     return new OdooClient({
       url,
@@ -213,12 +214,14 @@ export class OdooClient {
     try {
       listed = await this.postJsonRpc('/web/database/list', {});
     } catch (err) {
-      // Typically `list_db = False` on the server. Not a credential verdict,
-      // and no upstream body, so it never reads as an expired session.
+      // Typically `list_db = False` on the server, or a proxy that blocks
+      // `/web/database/*`. Not a credential verdict, and neither an upstream
+      // body nor a 401 status, so it never reads as an expired session.
       const reason = err instanceof Error ? err.message : String(err);
+      const status = err instanceof OdooClientError ? err.status : 502;
       throw new OdooClientError(
         `Odoo database list unavailable (${reason}) — set the database name in the setup`,
-        err instanceof OdooClientError ? err.status : 502,
+        status === 401 ? 502 : status,
       );
     }
     const names = Array.isArray(listed)
@@ -270,8 +273,14 @@ export class OdooClient {
       args: [db, this.login, this.apiKey, {}],
     });
     if (typeof response !== 'number' || !Number.isInteger(response) || response <= 0) {
+      // Odoo answers `false` for a wrong key and for a user missing from the
+      // database alike, so a discovered database stays a rejection — but the
+      // message names it, since it may not be the one the operator meant.
+      const dbHint = this.configuredDb
+        ? ''
+        : ` (database "${db}" is the first one Odoo lists — if the instance has several, set the database name in the setup)`;
       throw new OdooClientError(
-        `Odoo authentication failed: unexpected response ${JSON.stringify(response)}`,
+        `Odoo authentication failed: unexpected response ${JSON.stringify(response)}${dbHint}`,
         401,
         undefined,
         'protocol_auth_failure',
