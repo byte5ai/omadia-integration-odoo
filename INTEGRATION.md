@@ -7,18 +7,41 @@ points at this file by convention; do NOT trust your training-memory of
 
 ## Service Registry
 
-This plugin publishes two services on the kernel `ServiceRegistry`:
+This plugin publishes three services on the kernel `ServiceRegistry`:
 
 | Service Name   | TypeScript Type                                | Purpose                                              |
 |----------------|------------------------------------------------|------------------------------------------------------|
 | `odoo.client`  | `OdooClient` (`./src/odooClient.ts`)           | JSON-RPC wrapper, UID-cached, maxBytes-capped        |
 | `odoo.cache`   | `OdooResponseCache` (`./src/odooResponseCache.ts`) | 5-min TTL response cache for stable models       |
+| `odoo.schema`  | `OdooSchemaService` (`./src/odooSchema.ts`)    | Read whitelist + `fields_get` incl. `relation` (since 0.5.0) |
 
 Plus optionally (only when `enrich_company` config-flag is set):
 
 | Service Name   | TypeScript Type | Purpose                                |
 |----------------|-----------------|----------------------------------------|
 | `odoo.enrich`  | toolkit-side    | OpenRegister/NorthData company enrich  |
+
+### `odoo.schema@1` — schema only (since 0.5.0)
+
+```typescript
+interface OdooSchemaService {
+  // Whitelisted models, sorted, with their scope and the tools whose results
+  // carry their fields: `odoo_execute`, plus `odoo_query` when
+  // `odoo_generic_read_enabled` is on. No network call.
+  listModels(): readonly { model: string; scope: 'hr' | 'accounting'; tools: readonly string[] }[];
+  // One `fields_get` (type, relation, string, help) through the same guard as
+  // the tools: whitelist, response cache, HR red-line fields left out.
+  // Throws OdooSchemaError for a model outside the whitelist; passes an
+  // OdooClientError (unreachable, auth) through.
+  describeModel(model: string): Promise<readonly {
+    name: string; type: string; relation?: string; label?: string; help?: string;
+  }[]>;
+}
+```
+
+No record is read through this service. The omadia kernel's privacy field
+classification uses it to list relation fields (and what they point to) as
+soon as the integration is activated.
 
 ## Consumption Pattern
 

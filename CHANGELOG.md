@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.5.0
+
+Relation pre-fetch for the privacy field classification (byte5ai/omadia#1630
+follow-up). Until now the kernel only learned a field's relation once a chat
+had read that model, so the `/admin/privacy-fields` suggestions stayed empty
+after activation.
+
+- New service `odoo.schema@1` (`OdooSchemaService`, declared under
+  `provides:`):
+  - `listModels()` returns the read whitelist with each model's scope and the
+    tools that read it (`odoo_execute`, plus `odoo_query` when the generic read
+    tools are on). It makes no network call.
+  - `describeModel(model)` runs one `fields_get` (type, relation, label, help)
+    through `executeOdoo`. The whitelist, the response cache and the HR
+    red-line stripping apply as they do for the tools, so a red-line field is
+    never listed. A model outside the whitelist throws `OdooSchemaError`.
+  - It reads the schema only, never a record.
+- `odoo_describe` now returns `relation` (the target model) for many2one,
+  one2many and many2many fields.
+
 ## 0.4.1
 
 Follow-ups to the optional `odoo_db` (0.4.0):

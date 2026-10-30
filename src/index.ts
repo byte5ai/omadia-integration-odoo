@@ -27,6 +27,7 @@ export {
   ODOO_CLIENT_SERVICE_NAME,
   ODOO_CACHE_SERVICE_NAME,
   ODOO_ENRICH_SERVICE_NAME,
+  ODOO_SCHEMA_SERVICE_NAME,
 } from './plugin.js';
 export type { OdooPluginHandle } from './plugin.js';
 
@@ -61,6 +62,15 @@ export {
   createOdooVersionHandler,
 } from './odooReadTools.js';
 export type { OdooReadToolDeps } from './odooReadTools.js';
+
+export {
+  createOdooSchemaService,
+  parseFieldsGet,
+  OdooSchemaError,
+  ODOO_EXECUTE_TOOL_NAME,
+  ODOO_QUERY_TOOL_NAME,
+} from './odooSchema.js';
+export type { OdooSchemaField, OdooSchemaModel, OdooSchemaService } from './odooSchema.js';
 export type { OdooServerVersion } from './odooClient.js';
 
 export { NorthDataClient, NorthDataClientError } from './northDataClient.js';

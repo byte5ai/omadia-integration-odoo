@@ -3,10 +3,10 @@ schema_version: "1"
 identity:
   id: "@omadia/integration-odoo"
   name: "Odoo Connector"
-  version: "0.4.1"
+  version: "0.5.0"
   kind: "integration"
   domain: "odoo"
-  description: "Gemeinsamer Odoo-JSON-RPC-Layer (read-only) für alle Odoo-Konsumenten + Handelsregister-Enrichment (OpenRegister / NorthData). Publishes kernel-Services 'odoo.client' (OdooClient), 'odoo.cache' (OdooResponseCache), 'odoo.enrich' (CompanyEnrichmentProvider) + per-Scope Agent-Toolkits 'odoo.agentToolkit.{accounting,hr}' (query_graph + odoo_execute); contributes den native `odoo_version`-Tool und — optional via odoo_generic_read_enabled — die generischen Read-Tools `odoo_query` / `odoo_describe` sowie `enrich_company` via ctx.tools.register."
+  description: "Gemeinsamer Odoo-JSON-RPC-Layer (read-only) für alle Odoo-Konsumenten + Handelsregister-Enrichment (OpenRegister / NorthData). Publishes kernel-Services 'odoo.client' (OdooClient), 'odoo.cache' (OdooResponseCache), 'odoo.schema' (OdooSchemaService: whitelisted models + fields_get incl. relation), 'odoo.enrich' (CompanyEnrichmentProvider) + per-Scope Agent-Toolkits 'odoo.agentToolkit.{accounting,hr}' (query_graph + odoo_execute); contributes den native `odoo_version`-Tool und — optional via odoo_generic_read_enabled — die generischen Read-Tools `odoo_query` / `odoo_describe` sowie `enrich_company` via ctx.tools.register."
   authors:
     - name: "byte5 GmbH"
       email: "info@omadia.ai"
@@ -322,6 +322,11 @@ provides:
   - "odoo.agentToolkit.hr@1"
   - "odoo.agentToolkit.accounting@1"
   - "odoo.enrich@1"
+  # byte5ai/omadia#1630 follow-up — schema only (whitelisted models, the
+  # tools that read them, fields_get incl. `relation`; red-line fields left
+  # out). The kernel's privacy field classification reads it so suggestions
+  # exist right after activation, before any chat touched a model.
+  - "odoo.schema@1"
 
 # Builder service-type auto-discovery: maps the `ctx.services.provide(...)`
 # surfaces an agent may consume to the TypeScript type it imports. On
