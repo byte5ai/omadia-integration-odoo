@@ -197,7 +197,7 @@ export const odooDescribeToolSpec = {
   name: 'odoo_describe',
   description: [
     'Discover the Odoo schema. With no arguments, lists the whitelisted models grouped by scope (hr / accounting).',
-    'With "model" set, lists that model\'s fields (name + type + label) via fields_get so you can build a precise odoo_query.',
+    'With "model" set, lists that model\'s fields (name + type + label, plus the target model as "relation" for many2one/one2many/many2many) via fields_get so you can build a precise odoo_query.',
     'Read-only. Call this before odoo_query when unsure which fields a model exposes.',
   ].join(' '),
   input_schema: {
@@ -213,7 +213,7 @@ export const odooDescribeToolSpec = {
 };
 
 export const ODOO_DESCRIBE_PROMPT_DOC =
-  '\n- `odoo_describe`: discover the Odoo schema. No args → list the whitelisted models per scope (hr / accounting). `model` set → list that model\'s fields (name + type + label) via fields_get. Call this before `odoo_query` whenever you are unsure of the exact field names.\n';
+  '\n- `odoo_describe`: discover the Odoo schema. No args → list the whitelisted models per scope (hr / accounting). `model` set → list that model\'s fields (name + type + label, `relation` = target model of a relational field) via fields_get. Call this before `odoo_query` whenever you are unsure of the exact field names.\n';
 
 export function createOdooDescribeHandler(deps: OdooReadToolDeps) {
   return async (input: unknown): Promise<string> => {
@@ -243,17 +243,25 @@ export function createOdooDescribeHandler(deps: OdooReadToolDeps) {
       model,
       'fields_get',
       [],
-      { attributes: ['string', 'type', 'help'] },
+      { attributes: ['string', 'type', 'relation', 'help'] },
       deps,
     );
     if (!res.ok) return res.message;
-    // fields_get returns a { field: {string,type,help} } map — flatten to a
-    // compact list so the model gets the names without the verbose metadata.
-    const fieldsMap = (res.result ?? {}) as Record<string, { string?: string; type?: string }>;
+    // fields_get returns a { field: {string,type,relation,help} } map —
+    // flatten to a compact list so the model gets the names without the
+    // verbose metadata. `relation` names the target model of a relational
+    // field (many2one / one2many / many2many), e.g. to follow a join.
+    const fieldsMap = (res.result ?? {}) as Record<
+      string,
+      { string?: string; type?: string; relation?: string }
+    >;
     const fields = Object.entries(fieldsMap).map(([name, meta]) => ({
       name,
       type: meta?.type,
       label: meta?.string,
+      ...(typeof meta?.relation === 'string' && meta.relation.length > 0
+        ? { relation: meta.relation }
+        : {}),
     }));
     return boundJson({ model, scope, count: fields.length, fields });
   };

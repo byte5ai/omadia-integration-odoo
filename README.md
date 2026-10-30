@@ -23,7 +23,7 @@ contributes the native `enrich_company` tool.
 | Caching | `odooResponseCache.ts` |
 | Entity sync | `odooEntitySync.ts`, `odooEntityExtractor.ts` |
 | Company enrichment | NorthData + OpenRegister clients, fact mappers, ingest pipelines, `enrich_company` tool |
-| Service surface | Publishes `odoo.client`, `odoo.cache`, `odoo.enrich` to the service registry |
+| Service surface | Publishes `odoo.client`, `odoo.cache`, `odoo.schema`, `odoo.enrich` to the service registry |
 
 This package is a pure integration layer — no user-facing setup beyond Odoo
 connection credentials (see [`manifest.yaml`](manifest.yaml) for the full

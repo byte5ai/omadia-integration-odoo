@@ -48,6 +48,11 @@ import {
   odooQueryToolSpec,
   odooVersionToolSpec,
 } from './odooReadTools.js';
+import {
+  createOdooSchemaService,
+  ODOO_SCHEMA_SERVICE_NAME,
+  type OdooSchemaService,
+} from './odooSchema.js';
 
 /**
  * @omadia/integration-odoo — plugin entry point.
@@ -83,6 +88,7 @@ import {
 export const ODOO_CLIENT_SERVICE_NAME = 'odoo.client';
 export const ODOO_CACHE_SERVICE_NAME = 'odoo.cache';
 export const ODOO_ENRICH_SERVICE_NAME = 'odoo.enrich';
+export { ODOO_SCHEMA_SERVICE_NAME };
 // Phase 5B M3+M4: the accounting + HR sub-agents were extracted from the
 // kernel into their own packages (`@omadia/agent-odoo-accounting`,
 // `@omadia/agent-odoo-hr`) and consume their `odoo_execute` scope-locked
@@ -247,8 +253,16 @@ export async function activate(ctx: PluginContext): Promise<OdooPluginHandle> {
     );
   }
 
+  // `odoo.schema@1` — whitelist + fields_get (with `relation`) for kernel
+  // consumers that need the schema before a chat touched a model (omadia
+  // field classification). Same whitelist + red-line stripping as the tools.
+  const disposeSchema = ctx.services.provide<OdooSchemaService>(
+    ODOO_SCHEMA_SERVICE_NAME,
+    createOdooSchemaService({ ...readToolDeps, genericReadEnabled }),
+  );
+
   ctx.log(
-    `[odoo] ready (url=${url}, db=${db ?? '(first listed)'}, login=${login}, maxBytes=${String(maxBytes)}, insecureTls=${String(insecureTls)}) — services '${ODOO_CLIENT_SERVICE_NAME}' + '${ODOO_CACHE_SERVICE_NAME}' + '${ODOO_EXECUTE_TOOL_ACCOUNTING_SERVICE_NAME}' + '${ODOO_EXECUTE_TOOL_HR_SERVICE_NAME}' published; tools: odoo_version${genericReadEnabled ? ' + odoo_query + odoo_describe' : ' (generic read disabled)'}`,
+    `[odoo] ready (url=${url}, db=${db ?? '(first listed)'}, login=${login}, maxBytes=${String(maxBytes)}, insecureTls=${String(insecureTls)}) — services '${ODOO_CLIENT_SERVICE_NAME}' + '${ODOO_CACHE_SERVICE_NAME}' + '${ODOO_EXECUTE_TOOL_ACCOUNTING_SERVICE_NAME}' + '${ODOO_EXECUTE_TOOL_HR_SERVICE_NAME}' + '${ODOO_SCHEMA_SERVICE_NAME}' published; tools: odoo_version${genericReadEnabled ? ' + odoo_query + odoo_describe' : ' (generic read disabled)'}`,
   );
 
   // --- enrich_company provider + tool ---------------------------------------
@@ -496,6 +510,7 @@ export async function activate(ctx: PluginContext): Promise<OdooPluginHandle> {
       disposeEntitySync?.();
       disposeQueryTool?.();
       disposeDescribeTool?.();
+      disposeSchema();
       disposeVersionTool();
       disposeHrToolkit?.();
       disposeAccountingToolkit?.();

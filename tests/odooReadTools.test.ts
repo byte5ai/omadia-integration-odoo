@@ -120,6 +120,29 @@ describe('odoo_describe handler', () => {
     const name = parsed.fields.find((f: { name: string }) => f.name === 'name');
     assert.equal(name.type, 'char');
     assert.equal(name.label, 'Name');
+    assert.equal('relation' in name, false);
+  });
+
+  it('returns the target model of relational fields (byte5ai/omadia#1630 follow-up)', async () => {
+    let asked: unknown;
+    const handler = createOdooDescribeHandler(
+      deps(
+        stubClient((_m, _method, kwargs) => {
+          asked = kwargs['attributes'];
+          return {
+            partner_id: { string: 'Partner', type: 'many2one', relation: 'res.partner' },
+            line_ids: { string: 'Lines', type: 'one2many', relation: 'account.move.line' },
+            name: { string: 'Name', type: 'char', relation: '' },
+          };
+        }),
+      ),
+    );
+    const parsed = JSON.parse(await handler({ model: 'account.move' }));
+    assert.ok(Array.isArray(asked) && asked.includes('relation'));
+    const byName = (n: string) => parsed.fields.find((f: { name: string }) => f.name === n);
+    assert.equal(byName('partner_id').relation, 'res.partner');
+    assert.equal(byName('line_ids').relation, 'account.move.line');
+    assert.equal('relation' in byName('name'), false);
   });
 });
 
