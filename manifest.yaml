@@ -3,7 +3,7 @@ schema_version: "1"
 identity:
   id: "@omadia/integration-odoo"
   name: "Odoo Connector"
-  version: "0.5.0"
+  version: "0.6.0"
   kind: "integration"
   domain: "odoo"
   description: "Gemeinsamer Odoo-JSON-RPC-Layer (read-only) für alle Odoo-Konsumenten + Handelsregister-Enrichment (OpenRegister / NorthData). Publishes kernel-Services 'odoo.client' (OdooClient), 'odoo.cache' (OdooResponseCache), 'odoo.schema' (OdooSchemaService: whitelisted models + fields_get incl. relation), 'odoo.enrich' (CompanyEnrichmentProvider) + per-Scope Agent-Toolkits 'odoo.agentToolkit.{accounting,hr}' (query_graph + odoo_execute); contributes den native `odoo_version`-Tool und — optional via odoo_generic_read_enabled — die generischen Read-Tools `odoo_query` / `odoo_describe` sowie `enrich_company` via ctx.tools.register."
@@ -17,7 +17,7 @@ identity:
     - "erp"
 
 compat:
-  core: ">=1.0 <2.0"
+  core: ">=1.75.0 <2.0"
   node: ">=20"
 
 lifecycle:
@@ -260,7 +260,12 @@ permissions:
     reads: []
     writes: []
   network:
-    outbound: []
+    outbound:
+      - "$config.odoo_url"                 # operator-entered Odoo host
+      - "$config.openregister_base_url"   # OpenRegister override (optional)
+      - "api.openregister.de"             # OpenRegister default
+      - "$config.northdata_base_url"      # NorthData override (optional)
+      - "www.northdata.com"               # NorthData default
   filesystem:
     scratch: false
 
@@ -305,6 +310,24 @@ integrations:
 # Migrations-Checkliste:
 # docs/harness-platform/briefings/S+8-knowledge-graph.md
 #
+# Tool effects (spec 2042): id = registered tool name.
+capabilities:
+  - id: "odoo_version"
+    description: "Read the Odoo server version."
+    side_effects: "read"
+  - id: "odoo_query"
+    description: "Read-only generic Odoo query (opt-in)."
+    side_effects: "read"
+  - id: "odoo_describe"
+    description: "Read Odoo model field metadata (opt-in)."
+    side_effects: "read"
+  - id: "odoo_execute"
+    description: "Run a read-only Odoo execute_kw call (accounting/HR sub-agent toolkit; search/read methods only)."
+    side_effects: "read"
+  - id: "enrich_company"
+    description: "Look up company registry data (OpenRegister / NorthData)."
+    side_effects: "read"
+
 # omadia#839 — declare the plugin-scoped services this integration publishes
 # via `ctx.services.provide(...)` at activate. This is the PROVIDER half of the
 # odoo retirement: it lets the consumer agents (`@omadia/agent-odoo-hr`,
