@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0
+
+Spec 2042 plugin boundary.
+
+- Manifest: every tool has a `capabilities:` entry with `side_effects: read` (`odoo_version`, `odoo_query`, `odoo_describe`, `odoo_execute` [search/read methods only], `enrich_company` [external registry lookup]). `compat.core` is now `>=1.78.0 <2.0`.
+- `permissions.network.outbound` was empty; it now lists the hosts the code reaches: `$config.odoo_url`, `$config.openregister_base_url` + `api.openregister.de`, `$config.northdata_base_url` + `www.northdata.com`.
+- Known, not changed: the Odoo, OpenRegister and NorthData clients still use global `fetch` (src/odooClient.ts:131, src/openRegisterClient.ts:76, src/northDataClient.ts:136) and `odoo_insecure_tls` uses an `undici` Agent with its own dispatcher (src/odooClient.ts:1,117-126). Moving them to `ctx.http` is a follow-up once the kernel observes the traffic.
+
 ## 0.5.0
 
 Relation pre-fetch for the privacy field classification (byte5ai/omadia#1630
