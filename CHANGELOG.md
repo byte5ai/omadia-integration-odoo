@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1
+
+- Manifest: `permissions.graph.entity_systems: ["odoo"]` (ADR 0167, byte5ai/omadia#2242). The kernel holds this plugin's `knowledgeGraph@1` entity and fact writes to its declared systems; the entity sync writes only `odoo` entities. Without the declaration the kernel logs a `[security-audit]` warning now and refuses the writes once the ADR 0167 transition ends (byte5ai/omadia#2244). Kernels before ADR 0167 strip `odoo` from the list, so the plugin still runs there unchanged.
+
 ## 0.6.0
 
 Spec 2042 plugin boundary.

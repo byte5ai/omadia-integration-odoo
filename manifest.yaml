@@ -3,7 +3,7 @@ schema_version: "1"
 identity:
   id: "@omadia/integration-odoo"
   name: "Odoo Connector"
-  version: "0.6.0"
+  version: "0.6.1"
   kind: "integration"
   domain: "odoo"
   description: "Gemeinsamer Odoo-JSON-RPC-Layer (read-only) für alle Odoo-Konsumenten + Handelsregister-Enrichment (OpenRegister / NorthData). Publishes kernel-Services 'odoo.client' (OdooClient), 'odoo.cache' (OdooResponseCache), 'odoo.schema' (OdooSchemaService: whitelisted models + fields_get incl. relation), 'odoo.enrich' (CompanyEnrichmentProvider) + per-Scope Agent-Toolkits 'odoo.agentToolkit.{accounting,hr}' (query_graph + odoo_execute); contributes den native `odoo_version`-Tool und — optional via odoo_generic_read_enabled — die generischen Read-Tools `odoo_query` / `odoo_describe` sowie `enrich_company` via ctx.tools.register."
@@ -259,6 +259,10 @@ permissions:
   graph:
     reads: []
     writes: []
+    # ADR 0167 (byte5ai/omadia#2242): the kernel holds this plugin's
+    # knowledgeGraph@1 entity and fact writes to the systems named here.
+    entity_systems:
+      - "odoo"
   network:
     outbound:
       - "$config.odoo_url"                 # operator-entered Odoo host
