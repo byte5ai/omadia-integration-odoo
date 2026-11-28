@@ -10,7 +10,7 @@ import {
   type PersonIngest,
   type RiskLevel,
   type ShareholderEdgeIngest,
-} from './kernel-types.js';
+} from './registryTypes.js';
 
 /**
  * Pure, deterministic mapper: OpenRegister REST responses → graph-ingestable

@@ -4,6 +4,7 @@ import type {
   EnrichOutcome,
 } from './companyEnrichment.js';
 import type { KnowledgeGraph } from './kernel-types.js';
+import { ingestRegistryCompany } from './registryGraph.js';
 import type { NorthDataClient } from './northDataClient.js';
 import { NorthDataClientError } from './northDataClient.js';
 import type { NorthDataResponseCache } from './northDataResponseCache.js';
@@ -18,12 +19,12 @@ import {
  * Responsibilities:
  *   - Talk to NorthData via the client, caching by logical endpoint+params.
  *   - Run the deterministic mapper over the response.
- *   - Upsert Company, Persons, Relations, FinancialSnapshots into the graph.
+ *   - Upsert the company and its persons as `northdata` entities
+ *     (`registryGraph.ts`, ADR 0167).
  *   - Return a caller-friendly verdict (success / disambiguation / not_found).
  *
  * Strict scope: read-only on NorthData, read+write on the graph, **never
- * writes to Odoo**. The optional cross-link to an existing `OdooEntity` is a
- * single `REFERS_TO` edge — no Odoo mutation.
+ * writes to Odoo**.
  */
 
 export interface NorthDataIngestOptions {
@@ -115,29 +116,7 @@ export class NorthDataIngest implements CompanyEnrichmentProvider {
   // -------------------------------------------------------------------------
 
   private async ingestMapped(raw: unknown): Promise<EnrichOutcome> {
-    const mapped = mapCompanyResponse(raw);
-    const companyResult = await this.opts.graph.ingestCompanies([mapped.company]);
-    if (mapped.persons.length > 0) {
-      await this.opts.graph.ingestPersons(mapped.persons);
-    }
-    // Relations depend on both endpoints existing — persons were just
-    // ingested, the subject company was just ingested. Any relation edge
-    // whose counterpart company node doesn't exist (we only saw a register
-    // key on the relation, not a full Company payload) is quietly skipped by
-    // the graph — counted in `skipped`.
-    await this.opts.graph.ingestCompanyRelations(mapped.relations);
-    if (mapped.financialSnapshots.length > 0) {
-      await this.opts.graph.ingestFinancialSnapshots(mapped.financialSnapshots);
-    }
-    const fromCache = companyResult.updated > 0 && companyResult.inserted === 0;
-    const financialYears = mapped.financialSnapshots.map((s) => s.fiscalYear);
-    return {
-      status: 'success',
-      company: mapped.company,
-      personCount: mapped.persons.length,
-      financialYears,
-      fromCache,
-    };
+    return ingestRegistryCompany(this.opts.graph, 'northdata', mapCompanyResponse(raw));
   }
 
   /**

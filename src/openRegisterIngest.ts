@@ -4,6 +4,7 @@ import type {
   EnrichOutcome,
 } from './companyEnrichment.js';
 import type { KnowledgeGraph } from './kernel-types.js';
+import { ingestRegistryCompany } from './registryGraph.js';
 import type { NorthDataResponseCache } from './northDataResponseCache.js';
 import type { OpenRegisterClient } from './openRegisterClient.js';
 import { OpenRegisterClientError } from './openRegisterClient.js';
@@ -15,8 +16,8 @@ import {
 
 /**
  * OpenRegister-flavoured `CompanyEnrichmentProvider`. Wraps the client +
- * deterministic mapper and writes the result into the knowledge graph using
- * the generic ingest surface (so swapping to NorthData or any future provider
+ * deterministic mapper and writes the result into the knowledge graph as
+ * `openregister` entities (`registryGraph.ts`, so swapping to NorthData or any future provider
  * is just a pointer change in `index.ts`).
  *
  * Fetch strategy (driven by `fetchLevel`):
@@ -138,23 +139,7 @@ export class OpenRegisterIngest implements CompanyEnrichmentProvider {
   // -------------------------------------------------------------------------
 
   private async ingestMapped(mapped: MappedCompany): Promise<EnrichOutcome> {
-    const companyResult = await this.opts.graph.ingestCompanies([mapped.company]);
-    if (mapped.persons.length > 0) {
-      await this.opts.graph.ingestPersons(mapped.persons);
-    }
-    await this.opts.graph.ingestCompanyRelations(mapped.relations);
-    if (mapped.financialSnapshots.length > 0) {
-      await this.opts.graph.ingestFinancialSnapshots(mapped.financialSnapshots);
-    }
-    const fromCache = companyResult.updated > 0 && companyResult.inserted === 0;
-    const financialYears = mapped.financialSnapshots.map((s) => s.fiscalYear);
-    return {
-      status: 'success',
-      company: mapped.company,
-      personCount: mapped.persons.length,
-      financialYears,
-      fromCache,
-    };
+    return ingestRegistryCompany(this.opts.graph, 'openregister', mapped);
   }
 
   // ---- cache-aware fetch helpers -----------------------------------------

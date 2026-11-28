@@ -20,6 +20,12 @@ import { OdooEntitySync } from './odooEntitySync.js';
 import { OdooResponseCache } from './odooResponseCache.js';
 import { readOdooConnectionSettings } from './odooSettings.js';
 import { OpenRegisterClient } from './openRegisterClient.js';
+import {
+  ENTITY_SYNC_REQUESTS_PER_MINUTE,
+  INSECURE_TLS_RETIRED_WARNING,
+  odooFetchFromContext,
+  withMinInterval,
+} from './odooHttp.js';
 import { OpenRegisterIngest } from './openRegisterIngest.js';
 import type { CompanyEnrichmentProvider } from './companyEnrichment.js';
 import type {
@@ -67,7 +73,7 @@ import {
  * Optional config:
  *   - `odoo_db`      database name; empty = first one Odoo lists
  *   - `odoo_proxy_max_bytes` default 500000 — caps response payload size
- *   - `odoo_insecure_tls`    default 'false' — dev-only TLS bypass
+ *   - `odoo_insecure_tls`    retired (#10): no effect, logs a warning
  *
  * Required secret (via `ctx.secrets`):
  *   - `odoo_api_key`  rotated via Odoo → Profil → Accountsicherheit
@@ -141,8 +147,11 @@ export async function activate(ctx: PluginContext): Promise<OdooPluginHandle> {
   // omadia#1453 — a key Odoo stops accepting while we run (revoked or
   // expired upstream) surfaces on the store badge + tool gate at the first
   // real call, instead of only as tool text in a chat turn.
+  if (insecureTls) warn(INSECURE_TLS_RETIRED_WARNING);
+  // #10 — every Odoo request goes through ctx.http (allow-list, egress check).
   const client = new OdooClient({
     ...settings,
+    fetchImpl: odooFetchFromContext(ctx),
     authObserver: createAuthStatusReporter(ctx.status),
   });
   const cache = new OdooResponseCache();
@@ -332,6 +341,7 @@ export async function activate(ctx: PluginContext): Promise<OdooPluginHandle> {
       baseUrl: orBaseUrl,
       maxBytes: orMaxBytes,
       minIntervalMs: orRps > 0 ? Math.ceil(1000 / orRps) : 0,
+      fetchImpl: odooFetchFromContext(ctx),
     });
     const orCache = new NorthDataResponseCache({
       ttlMs: orCacheTtlDays * 24 * 60 * 60 * 1000,
@@ -380,6 +390,7 @@ export async function activate(ctx: PluginContext): Promise<OdooPluginHandle> {
       baseUrl: ndBaseUrl,
       maxBytes: ndMaxBytes,
       minIntervalMs: ndRps > 0 ? Math.ceil(1000 / ndRps) : 0,
+      fetchImpl: odooFetchFromContext(ctx),
     });
     const ndCache = new NorthDataResponseCache({
       ttlMs: ndCacheTtlDays * 24 * 60 * 60 * 1000,
@@ -463,8 +474,18 @@ export async function activate(ctx: PluginContext): Promise<OdooPluginHandle> {
       5000,
       warn,
     );
+    // #10 — the sync gets its own client, paced below the shared ctx.http
+    // budget, so a run does not starve chat tools and consumer plugins.
+    const syncClient = new OdooClient({
+      ...settings,
+      fetchImpl: withMinInterval(
+        odooFetchFromContext(ctx),
+        Math.ceil(60_000 / ENTITY_SYNC_REQUESTS_PER_MINUTE),
+      ),
+      authObserver: createAuthStatusReporter(ctx.status),
+    });
     const sync = new OdooEntitySync({
-      odoo: client,
+      odoo: syncClient,
       graph: graphForSync,
       pageSize,
       maxPerModel,

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.7.0
+
+### `enrich_company` writes through `ingestEntities` (#13)
+
+- OpenRegister and NorthData results were written through `graph.ingestCompanies`, `ingestPersons`, `ingestCompanyRelations` and `ingestFinancialSnapshots`. The kernel has none of them (gone with the KG-ACL refactor, byte5ai/omadia#120), and the bounded `knowledgeGraph@1` service a plugin gets exposes only the contract methods (ADR 0044). The first `enrich_company` call with a provider switched on failed with `ingestCompanies is not a function`.
+- The company and its persons are now `ingestEntities` rows in the provider's own entity system (`src/registryGraph.ts`): `openregister:company:<id>` / `northdata:company:<register key>` and `<system>:person:<synthetic id>`. `permissions.graph.entity_systems` declares `openregister` and `northdata` next to `odoo` (ADR 0167); registry data never lands in `odoo`.
+- The contract has no edge write, so managers, shareholders and successors are kept as entity-id references in the company's extras (`managers`, `shareholders`, `successors`).
+- Financial snapshots are no longer written: a fact needs a source turn (`FactIngest.sourceTurnId`), which a tool call does not have. The fiscal years stay on the company (`financialYears`) and in the tool's answer.
+- A person's birth date is used for the stable id only and is not stored on the node. A person carries no relation list: the graph merges extras per key, so a list written for one company would overwrite another's. The company's relation lists, `riskLevel` and `riskSignals` are always written, empty included, so a later run clears what no longer applies.
+- `kernel-types.ts` keeps only kernel shapes: the local `KnowledgeGraph` projection is `ingestEntities` only, and the registry payloads moved to `src/registryTypes.ts`.
+
+### Odoo requests go through `ctx.http`; the private TLS bypass is gone (#10)
+
+- With `ODOO_INSECURE_TLS` / `odoo_insecure_tls` the client sent every Odoo request through its own `undici` agent (`rejectUnauthorized: false`), past the kernel's plugin egress check (S3b, byte5ai/omadia#2152; residual in S3c). Without it, it used the global `fetch`.
+- The Odoo client, the connection probe, `OdooClient.fromContext` and the OpenRegister / NorthData clients now send every request through `ctx.http` (`src/odooHttp.ts`): the manifest allow-list (`$config.odoo_url`), the room's host prohibitions and the model-endpoint block apply. A host without `ctx.http` fails activation instead of falling back to a path the kernel cannot see. `OdooClient.fromConfig` (no plugin context) keeps the global `fetch`, which the egress guard checks.
+- `ctx.http` allows 60 requests per plugin and minute. A request it refuses with `HttpRateLimitError` waits and is sent again (5 s, 10 s, 20 s, 30 s), so a busy turn slows down instead of failing. The entity sync has its own client, paced at 40 requests per minute, so a run leaves part of the budget to chat tools and the consumer plugins.
+- `odoo_insecure_tls` is retired: it has no effect and logs a warning at activation. A private-CA or self-signed Odoo certificate is trusted on the host with `NODE_EXTRA_CA_CERTS` (verification stays on). Disabling verification is LOCAL USE ONLY and never set on a hosted instance. A per-plugin, operator-set trust option for `ctx.http` is proposed in byte5ai/omadia#2381.
+- `undici` is no longer a dependency.
+
 ## 0.6.1
 
 - Manifest: `permissions.graph.entity_systems: ["odoo"]` (ADR 0167, byte5ai/omadia#2242). The kernel holds this plugin's `knowledgeGraph@1` entity and fact writes to its declared systems; the entity sync writes only `odoo` entities. Without the declaration the kernel logs a `[security-audit]` warning now and refuses the writes once the ADR 0167 transition ends (byte5ai/omadia#2244). Kernels before ADR 0167 strip `odoo` from the list, so the plugin still runs there unchanged.

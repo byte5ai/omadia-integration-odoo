@@ -11,7 +11,7 @@ import {
   type RiskLevel,
   type ShareholderEdgeIngest,
   type SucceededByEdgeIngest,
-} from './kernel-types.js';
+} from './registryTypes.js';
 
 /**
  * Pure, deterministic mapper: NorthData `/company/v1/company` JSON response →

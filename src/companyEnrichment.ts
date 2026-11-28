@@ -1,4 +1,4 @@
-import type { CompanyIngest } from './kernel-types.js';
+import type { CompanyIngest } from './registryTypes.js';
 
 /**
  * Provider-agnostic abstraction for company-enrichment data sources.
@@ -31,8 +31,8 @@ export interface CompanyEnrichmentProvider {
    * Stable-id entry point. `externalId` is whatever the provider calls its
    * canonical company identifier — for NorthData this is `register.uniqueKey`
    * (numeric string), for OpenRegister it's the permalink-style id
-   * (`DE-HRB-F1103-267645`). The graph stores both under the same
-   * `company:<externalId>` naming scheme.
+   * (`DE-HRB-F1103-267645`). The graph stores the company as
+   * `<provider>:company:<externalId>` (`registryGraph.ts`).
    */
   enrichByExternalId(externalId: string): Promise<EnrichOutcome>;
 }

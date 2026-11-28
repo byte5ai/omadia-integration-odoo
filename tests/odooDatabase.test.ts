@@ -198,6 +198,12 @@ function fakeCtx(config: Record<string, unknown>): { ctx: PluginContext; logs: s
     log: (msg: string) => {
       logs.push(msg);
     },
+    // #10 — the client's network path; these tests never send a request.
+    http: {
+      fetch: async () => {
+        throw new Error('unexpected request');
+      },
+    },
   } as unknown as PluginContext;
   return { ctx, logs };
 }
