@@ -4,13 +4,9 @@
  * kernel implementations (EntityRefBus, KnowledgeGraph, LocalSubAgentTool)
  * satisfy these interfaces without the plugin importing from kernel paths.
  *
- * When S+8 extracts `@omadia/knowledge-graph`, the KG-related types
- * here should be replaced by imports from that package (and this plugin's
- * manifest should declare `requires: ["knowledgeGraph@^1"]`). Until then,
- * this file is the single source of cross-boundary shapes for Odoo-plugin.
+ * Only kernel shapes belong here. The company-enrichment payloads are
+ * plugin-local and live in `registryTypes.ts`.
  */
-
-import { createHash } from 'node:crypto';
 
 // ---------------------------------------------------------------------------
 // EntityRef + EntityRefBus
@@ -34,11 +30,15 @@ export interface EntityRefBus {
 // Knowledge-graph ingest payloads
 // ---------------------------------------------------------------------------
 
-export type CompanyStatus = 'active' | 'liquidation' | 'terminated';
-export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
+/**
+ * Entity systems this plugin writes. Each one must be listed in the
+ * manifest's `permissions.graph.entity_systems` (ADR 0167): `odoo` for the
+ * entity sync, `openregister` / `northdata` for `enrich_company`.
+ */
+export type EntitySystem = 'odoo' | 'openregister' | 'northdata';
 
 export interface EntityIngest {
-  system: 'odoo' | 'confluence';
+  system: EntitySystem;
   model: string;
   id: string | number;
   displayName?: string;
@@ -51,139 +51,15 @@ export interface EntityIngestResult {
   updated: number;
 }
 
-export interface CompanyIngest {
-  externalId: string;
-  name: string;
-  rawName?: string;
-  legalForm?: string;
-  registerCourt?: string;
-  registerNumber?: string;
-  registerCountry?: string;
-  status?: CompanyStatus;
-  terminated?: boolean;
-  address?: string;
-  vatId?: string;
-  proxyPolicy?: string;
-  northDataUrl?: string;
-  segmentCodes?: Record<string, string[]>;
-  riskLevel?: RiskLevel;
-  riskSignals?: string[];
-  isWatched?: boolean;
-  extras?: Record<string, unknown>;
-}
-
-export interface CompanyIngestResult {
-  companyIds: string[];
-  inserted: number;
-  updated: number;
-}
-
-export interface PersonIngest {
-  externalId: string;
-  name: string;
-  firstName?: string;
-  lastName: string;
-  birthDate?: string;
-  city?: string;
-  internalNorthDataId?: string;
-  extras?: Record<string, unknown>;
-}
-
-export interface PersonIngestResult {
-  personIds: string[];
-  inserted: number;
-  updated: number;
-}
-
-export interface ManagesEdgeIngest {
-  personExternalId: string;
-  companyExternalId: string;
-  role?: string;
-  since?: string;
-  until?: string;
-}
-
-export interface ShareholderEdgeIngest {
-  holderExternalId: string;
-  holderType: 'Person' | 'Company';
-  companyExternalId: string;
-  sharePercent?: number;
-  since?: string;
-  until?: string;
-}
-
-export interface SucceededByEdgeIngest {
-  fromCompanyExternalId: string;
-  toCompanyExternalId: string;
-  reason?: string;
-}
-
-export interface CompanyRelationsIngest {
-  manages?: ManagesEdgeIngest[];
-  shareholders?: ShareholderEdgeIngest[];
-  successions?: SucceededByEdgeIngest[];
-}
-
-export interface FinancialIndicator {
-  id: string;
-  name?: string;
-  value?: number;
-  unit?: string;
-  estimate?: boolean;
-  note?: string;
-}
-
-export interface FinancialSnapshotIngest {
-  companyExternalId: string;
-  fiscalYear: number;
-  date?: string;
-  consolidated?: boolean;
-  sourceName?: string;
-  items: FinancialIndicator[];
-}
-
-export interface FinancialSnapshotIngestResult {
-  snapshotIds: string[];
-  inserted: number;
-  updated: number;
-  skipped: number;
-}
-
 /**
- * Narrow projection of the kernel KnowledgeGraph surface used by this plugin
- * (OdooEntitySync + NorthData/OpenRegister ingest). Structurally satisfied
- * by the full kernel interface.
+ * Narrow projection of the kernel `knowledgeGraph@1` surface this plugin
+ * uses: entity writes only (OdooEntitySync, company enrichment). The bounded
+ * service a plugin gets (ADR 0044) holds them to the systems declared in
+ * `permissions.graph.entity_systems` (ADR 0167). Structurally satisfied by
+ * the plugin-api `KnowledgeGraph`.
  */
 export interface KnowledgeGraph {
   ingestEntities(entities: EntityIngest[]): Promise<EntityIngestResult>;
-  ingestCompanies(companies: CompanyIngest[]): Promise<CompanyIngestResult>;
-  ingestPersons(persons: PersonIngest[]): Promise<PersonIngestResult>;
-  ingestCompanyRelations(rels: CompanyRelationsIngest): Promise<unknown>;
-  ingestFinancialSnapshots(
-    snapshots: FinancialSnapshotIngest[],
-  ): Promise<FinancialSnapshotIngestResult>;
-}
-
-/**
- * Deterministic `externalId` for Person nodes. NorthData's own Person.id is
- * documented as volatile, so we derive a stable hash over last/first name +
- * birth date + city. Must match kernel's implementation byte-for-byte so both
- * sides ingest into the same node.
- */
-export function personSyntheticId(parts: {
-  lastName: string;
-  firstName?: string;
-  birthDate?: string;
-  city?: string;
-}): string {
-  const norm = (s?: string): string => (s ?? '').trim().toLowerCase();
-  const joined = [
-    norm(parts.lastName),
-    norm(parts.firstName),
-    norm(parts.birthDate),
-    norm(parts.city),
-  ].join('|');
-  return createHash('sha1').update(joined).digest('hex').slice(0, 16);
 }
 
 // ---------------------------------------------------------------------------

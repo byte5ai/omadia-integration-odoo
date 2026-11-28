@@ -3,7 +3,7 @@ schema_version: "1"
 identity:
   id: "@omadia/integration-odoo"
   name: "Odoo Connector"
-  version: "0.6.1"
+  version: "0.7.0"
   kind: "integration"
   domain: "odoo"
   description: "Gemeinsamer Odoo-JSON-RPC-Layer (read-only) für alle Odoo-Konsumenten + Handelsregister-Enrichment (OpenRegister / NorthData). Publishes kernel-Services 'odoo.client' (OdooClient), 'odoo.cache' (OdooResponseCache), 'odoo.schema' (OdooSchemaService: whitelisted models + fields_get incl. relation), 'odoo.enrich' (CompanyEnrichmentProvider) + per-Scope Agent-Toolkits 'odoo.agentToolkit.{accounting,hr}' (query_graph + odoo_execute); contributes den native `odoo_version`-Tool und — optional via odoo_generic_read_enabled — die generischen Read-Tools `odoo_query` / `odoo_describe` sowie `enrich_company` via ctx.tools.register."
@@ -261,8 +261,12 @@ permissions:
     writes: []
     # ADR 0167 (byte5ai/omadia#2242): the kernel holds this plugin's
     # knowledgeGraph@1 entity and fact writes to the systems named here.
+    # `odoo` is the entity sync; `openregister` / `northdata` hold the
+    # company and person nodes `enrich_company` writes (integration-odoo#13).
     entity_systems:
       - "odoo"
+      - "openregister"
+      - "northdata"
   network:
     outbound:
       - "$config.odoo_url"                 # operator-entered Odoo host
@@ -300,19 +304,9 @@ integrations:
 # via `ctx.jobs.register`). Konsumiert Kernel-Bridge `knowledgeGraph`
 # (§3 — pre-S+8) via `ctx.services.get(...)`.
 #
-# Deferred zu S+8: sobald `@omadia/knowledge-graph` extrahiert wird,
-# hier ergänzen:
-#   requires:
-#     - "knowledgeGraph@^1"   # OdooEntitySync + NorthData/OpenRegister
-#                             # Ingest → graph.ingestCompanies/Persons/
-#                             # CompanyRelations/FinancialSnapshots
-# `entityRefBus` wird heute vom Odoo-Plugin NICHT konsumiert — der Kernel
-# reicht den Bus direkt an `createOdooExecuteTool` durch. Erst wenn
-# `createOdooExecuteTool` vom Kernel ins Plugin wandert (nicht in S+8
-# geplant), wird `requires: ["entityRefBus@^1"]` nötig.
-# Siehe S+4 design-gabel #5 und S+8 Follow-Up-Wiring für die vollständige
-# Migrations-Checkliste:
-# docs/harness-platform/briefings/S+8-knowledge-graph.md
+# Graph writes go through the bounded `knowledgeGraph@1` service
+# (`ingestEntities` only, ADR 0044) into the systems declared under
+# `permissions.graph.entity_systems` (ADR 0167).
 #
 # Tool effects (spec 2042): id = registered tool name.
 capabilities:
