@@ -9,6 +9,14 @@
  */
 
 export { OdooClient, OdooClientError, authRejectionOf } from './odooClient.js';
+export {
+  odooFetchFromContext,
+  withRateLimitRetry,
+  isHttpRateLimitError,
+  RATE_LIMIT_RETRY_WAITS_MS,
+  withMinInterval,
+  ENTITY_SYNC_REQUESTS_PER_MINUTE,
+} from './odooHttp.js';
 export type {
   OdooAuthObserver,
   OdooAuthRejection,

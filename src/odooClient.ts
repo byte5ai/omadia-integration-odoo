@@ -1,6 +1,6 @@
-import { Agent as UndiciAgent, fetch as undiciFetch } from 'undici';
 import type { ConnectionRejectionCause, PluginContext } from '@omadia/plugin-api';
 import { readString } from './configValues.js';
+import { INSECURE_TLS_RETIRED_WARNING, odooFetchFromContext } from './odooHttp.js';
 import type { OdooClientConfig } from './kernel-types.js';
 
 /**
@@ -61,9 +61,9 @@ interface OdooClientOptions {
   login: string;
   apiKey: string;
   maxBytes: number;
-  /** When true, disable TLS verification for Odoo requests only. Used for
-   * local dev against a private-CA-signed Odoo; never enable in production. */
-  insecureTls?: boolean;
+  /** The network path. Inside the kernel this is `ctx.http`
+   * (`odooFetchFromContext`, #10); absent, the global `fetch`, which the
+   * kernel's egress guard checks too. */
   fetchImpl?: typeof fetch;
   authObserver?: OdooAuthObserver;
 }
@@ -108,41 +108,20 @@ export class OdooClient {
     this.apiKey = opts.apiKey;
     this.maxBytes = opts.maxBytes;
     this.authObserver = opts.authObserver;
-    if (opts.fetchImpl) {
-      this.fetchImpl = opts.fetchImpl;
-    } else if (opts.insecureTls) {
-      // Scoped TLS bypass: a private undici Agent that skips cert verification
-      // is bound only to this client's fetches. Node's global fetch and
-      // Anthropic/Confluence connections keep full verification.
-      const agent = new UndiciAgent({ connect: { rejectUnauthorized: false } });
-      this.fetchImpl = ((
-        input: Parameters<typeof fetch>[0],
-        init?: Parameters<typeof fetch>[1],
-      ) =>
-        undiciFetch(input as string, {
-          ...(init as Record<string, unknown>),
-          dispatcher: agent,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any)) as unknown as typeof fetch;
-      console.warn(
-        '[odoo-client] ⚠ TLS verification DISABLED for Odoo requests (ODOO_INSECURE_TLS=true) — LOCAL USE ONLY',
-      );
-    } else {
-      this.fetchImpl = fetch;
-    }
+    this.fetchImpl = opts.fetchImpl ?? fetch;
   }
 
   static fromConfig(config: OdooClientConfig): OdooClient {
     if (!config.ODOO_URL || !config.ODOO_LOGIN || !config.ODOO_API_KEY) {
       throw new Error('OdooClient.fromConfig called without required secrets');
     }
+    if (config.ODOO_INSECURE_TLS) console.warn(INSECURE_TLS_RETIRED_WARNING);
     return new OdooClient({
       url: config.ODOO_URL,
       db: config.ODOO_DB,
       login: config.ODOO_LOGIN,
       apiKey: config.ODOO_API_KEY,
       maxBytes: config.ODOO_PROXY_MAX_BYTES,
-      insecureTls: config.ODOO_INSECURE_TLS,
     });
   }
 
@@ -151,6 +130,7 @@ export class OdooClient {
    * non-secret fields from the installed-agent registry. Because HR and
    * Accounting both `depends_on` the Odoo integration, their ctx resolves to
    * the same credentials — a shared client for both is therefore safe.
+   * Requests go through `ctx.http` (#10).
    */
   static async fromContext(
     ctx: PluginContext,
@@ -160,13 +140,14 @@ export class OdooClient {
     const url = ctx.config.require<string>('odoo_url');
     const db = readString(ctx.config.get<unknown>('odoo_db'), '') || undefined;
     const login = ctx.config.require<string>('odoo_login');
+    if (operational.insecureTls) ctx.log(INSECURE_TLS_RETIRED_WARNING);
     return new OdooClient({
       url,
       db,
       login,
       apiKey,
       maxBytes: operational.maxBytes,
-      insecureTls: operational.insecureTls,
+      fetchImpl: odooFetchFromContext(ctx),
     });
   }
 

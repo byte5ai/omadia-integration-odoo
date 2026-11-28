@@ -25,6 +25,19 @@ contributes the native `enrich_company` tool.
 | Company enrichment | NorthData + OpenRegister clients, fact mappers, ingest pipelines, `enrich_company` tool |
 | Service surface | Publishes `odoo.client`, `odoo.cache`, `odoo.schema`, `odoo.enrich` to the service registry |
 
+### Network and TLS
+
+Every Odoo, OpenRegister and NorthData request goes through `ctx.http`:
+the allow-list from `permissions.network.outbound`, the kernel's egress check
+and a per-plugin request budget, which the clients wait out on
+`HttpRateLimitError`. The plugin has no network dispatcher of its own (#10).
+
+`odoo_insecure_tls` is retired and has no effect. To reach an Odoo with a
+private-CA or self-signed certificate, add that certificate on the host with
+`NODE_EXTRA_CA_CERTS`; verification stays on. **LOCAL USE ONLY:** never
+disable TLS verification host-wide on a hosted instance. A per-plugin trust
+option on `ctx.http` is proposed in byte5ai/omadia#2381.
+
 This package is a pure integration layer — no user-facing setup beyond Odoo
 connection credentials (see [`manifest.yaml`](manifest.yaml) for the full
 field list).

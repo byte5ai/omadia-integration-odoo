@@ -120,8 +120,8 @@ setup:
       default: 500000
     - key: "odoo_insecure_tls"
       type: "boolean"
-      label: "TLS-Verifizierung deaktivieren"
-      help: "Nur für lokalen Dev mit privatem CA-Cert: schaltet TLS-Verify für Odoo-Requests aus. In Produktion MUSS das aus bleiben."
+      label: "TLS-Verifizierung deaktivieren (stillgelegt)"
+      help: "Stillgelegt seit 0.7.0, ohne Wirkung (integration-odoo#10): alle Odoo-Requests laufen über ctx.http mit TLS-Prüfung. Für ein Odoo mit privatem CA- oder selbstsigniertem Zertifikat das Zertifikat auf dem Host per NODE_EXTRA_CA_CERTS hinterlegen. Ein Schalter pro Plugin ist im Kernel angefragt (byte5ai/omadia#2381)."
       required: false
       default: false
 
@@ -141,7 +141,7 @@ setup:
     - key: "odoo_entity_sync_enabled"
       type: "boolean"
       label: "Entity-Sync aktivieren"
-      help: "Registriert einen Background-Job, der res.partner / hr.employee / hr.department / account.journal periodisch in den Knowledge-Graph spiegelt."
+      help: "Registriert einen Background-Job, der res.partner / hr.employee / hr.department / account.journal periodisch in den Knowledge-Graph spiegelt. Der Job nutzt höchstens 40 der 60 ctx.http-Requests pro Minute, die das Plugin hat; der Rest bleibt für Chat-Tools frei."
       required: false
       default: false
     - key: "odoo_entity_sync_interval_hours"

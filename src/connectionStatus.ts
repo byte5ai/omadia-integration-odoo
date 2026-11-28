@@ -10,6 +10,7 @@ import {
   type OdooAuthObserver,
   type OdooClientError,
 } from './odooClient.js';
+import { odooFetchFromContext } from './odooHttp.js';
 import {
   readOdooConnectionSettings,
   type OdooConnectionSettings,
@@ -35,10 +36,12 @@ import {
 /** Factory seam so tests can exercise the verdict mapping without a network. */
 export type OdooProbeClientFactory = (
   settings: OdooConnectionSettings,
+  ctx: PluginContext,
 ) => Pick<OdooClient, 'checkCredentials'>;
 
-const defaultProbeClient: OdooProbeClientFactory = (settings) =>
-  new OdooClient(settings);
+/** The probe takes the same network path as the tools: `ctx.http` (#10). */
+const defaultProbeClient: OdooProbeClientFactory = (settings, ctx) =>
+  new OdooClient({ ...settings, fetchImpl: odooFetchFromContext(ctx) });
 
 /**
  * Map one fresh `common.authenticate` to a connection verdict:
@@ -54,7 +57,7 @@ export async function verifyOdooConnection(
 ): Promise<PluginConnectionVerdict> {
   try {
     const settings = await readOdooConnectionSettings(ctx);
-    await makeClient(settings).checkCredentials();
+    await makeClient(settings, ctx).checkCredentials();
     return { status: 'connected' };
   } catch (err) {
     const cause = authRejectionOf(err);
